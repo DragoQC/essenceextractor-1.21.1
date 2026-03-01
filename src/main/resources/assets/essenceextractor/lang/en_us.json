@@ -1,0 +1,14 @@
+{
+  "itemGroup.essenceextractor": "Essence Extractor",
+  "block.essenceextractor.essence_extractor": "Essence Extractor",
+  "item.essenceextractor.experience_bucket": "Bucket of Experience",
+  "fluid_type.essenceextractor.experience": "Experience Fluid",
+
+  "essenceextractor.configuration.title": "Essence Extractor Configs",
+  "essenceextractor.configuration.section.essenceextractor.common.toml": "Essence Extractor Configs",
+  "essenceextractor.configuration.section.essenceextractor.common.toml.title": "Essence Extractor Configs",
+  "essenceextractor.configuration.items": "Item List",
+  "essenceextractor.configuration.logDirtBlock": "Log Dirt Block",
+  "essenceextractor.configuration.magicNumberIntroduction": "Magic Number Text",
+  "essenceextractor.configuration.magicNumber": "Magic Number"
+}

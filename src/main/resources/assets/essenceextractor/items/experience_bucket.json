@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "essenceextractor:item/experience_bucket"
+  }
+}
