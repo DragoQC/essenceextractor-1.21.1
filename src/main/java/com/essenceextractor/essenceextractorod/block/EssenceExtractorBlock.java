@@ -32,7 +32,7 @@ public class EssenceExtractorBlock extends Block implements EntityBlock {
                     return ItemInteractionResult.CONSUME;
                 }
 
-                player.openMenu(essenceExtractorBlockEntity, pos);
+                openExtractorMenu(player, essenceExtractorBlockEntity, pos);
                 return ItemInteractionResult.CONSUME;
             }
         }
@@ -45,7 +45,7 @@ public class EssenceExtractorBlock extends Block implements EntityBlock {
         if (!level.isClientSide()) {
             BlockEntity blockEntity = level.getBlockEntity(pos);
             if (blockEntity instanceof EssenceExtractorBlockEntity essenceExtractorBlockEntity) {
-                player.openMenu(essenceExtractorBlockEntity, pos);
+                openExtractorMenu(player, essenceExtractorBlockEntity, pos);
             }
             return InteractionResult.CONSUME;
         }
@@ -56,6 +56,10 @@ public class EssenceExtractorBlock extends Block implements EntityBlock {
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
         return new EssenceExtractorBlockEntity(pos, state);
+    }
+
+    private static void openExtractorMenu(Player player, EssenceExtractorBlockEntity blockEntity, BlockPos pos) {
+        player.openMenu(blockEntity, pos);
     }
 
     @Override

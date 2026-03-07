@@ -38,6 +38,7 @@ public final class ServerSettings {
     }
 
     public static void load() {
+        // Load once during server startup; keep resilient defaults if file is malformed.
         Path path = FMLPaths.CONFIGDIR.get().resolve(FILE_NAME);
         try {
             if (!Files.exists(path)) {

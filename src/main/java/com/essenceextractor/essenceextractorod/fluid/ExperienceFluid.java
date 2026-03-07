@@ -2,6 +2,9 @@ package com.essenceextractor.essenceextractormod.fluid;
 
 import net.neoforged.neoforge.fluids.BaseFlowingFluid;
 
+/**
+ * Thin wrappers for NeoForge flowing/source fluid variants.
+ */
 public class ExperienceFluid {
     public static class Flowing extends BaseFlowingFluid.Flowing {
         public Flowing(Properties properties) {

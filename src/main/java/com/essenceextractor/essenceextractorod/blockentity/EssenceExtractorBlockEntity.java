@@ -57,6 +57,10 @@ import net.neoforged.neoforge.energy.IEnergyStorage;
 import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.items.ItemStackHandler;
 
+/**
+ * Server-side state and logic for the Essence Extractor machine.
+ * The machine captures entities/items/xp, batches mob processing, and exposes UI-synced storage data.
+ */
 public class EssenceExtractorBlockEntity extends BlockEntity implements net.minecraft.world.MenuProvider {
     public static final int SLOT_COUNT = 21;
     public static final int UPGRADE_SLOT_COUNT = 3;
@@ -106,7 +110,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
     private final ItemStackHandler itemHandler = new ItemStackHandler(SLOT_COUNT) {
         @Override
         protected void onContentsChanged(int slot) {
-            setChanged();
+            markDirty();
         }
     };
 
@@ -125,20 +129,14 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         @Override
         protected void onContentsChanged(int slot) {
             updateEnergyCapacityFromUnbreaking();
-            setChanged();
-            if (level != null && !level.isClientSide()) {
-                level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
-            }
+            markDirtyAndSync();
         }
     };
 
     private final FluidTank tank = new FluidTank(FLUID_CAPACITY, this::isFluidValid) {
         @Override
         protected void onContentsChanged() {
-            setChanged();
-            if (level != null && !level.isClientSide()) {
-                level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
-            }
+            markDirtyAndSync();
         }
     };
     private final MachineEnergyStorage energyStorage =
@@ -262,30 +260,10 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         tag.putInt("ProcessPercent", this.processPercent);
         tag.putBoolean("ShowArea", this.showArea);
 
-        ListTag queuedList = new ListTag();
-        for (CapturedMobData data : this.capturedMobQueue) {
-            ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(data.type());
-            if (id == null) {
-                continue;
-            }
-            CompoundTag entry = new CompoundTag();
-            entry.putString("Type", id.toString());
-            entry.putBoolean("Baby", data.wasBaby());
-            queuedList.add(entry);
-        }
+        ListTag queuedList = writeMobQueueToTag(this.capturedMobQueue);
         tag.put("CapturedQueue", queuedList);
 
-        ListTag processingList = new ListTag();
-        for (CapturedMobData data : this.processingMobQueue) {
-            ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(data.type());
-            if (id == null) {
-                continue;
-            }
-            CompoundTag entry = new CompoundTag();
-            entry.putString("Type", id.toString());
-            entry.putBoolean("Baby", data.wasBaby());
-            processingList.add(entry);
-        }
+        ListTag processingList = writeMobQueueToTag(this.processingMobQueue);
         tag.put("ProcessingQueue", processingList);
 
         ListTag outputList = new ListTag();
@@ -327,26 +305,8 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         this.processingMobCounts.clear();
         this.outputBuffer.clear();
 
-        ListTag queuedList = tag.getList("CapturedQueue", Tag.TAG_COMPOUND);
-        for (int i = 0; i < queuedList.size(); i++) {
-            CompoundTag entry = queuedList.getCompound(i);
-            EntityType<?> type = parseEntityType(entry.getString("Type"));
-            if (type == null) {
-                continue;
-            }
-            this.capturedMobQueue.addLast(new CapturedMobData(type, entry.getBoolean("Baby")));
-        }
-
-        ListTag processingList = tag.getList("ProcessingQueue", Tag.TAG_COMPOUND);
-        for (int i = 0; i < processingList.size(); i++) {
-            CompoundTag entry = processingList.getCompound(i);
-            EntityType<?> type = parseEntityType(entry.getString("Type"));
-            if (type == null) {
-                continue;
-            }
-            this.processingMobQueue.addLast(new CapturedMobData(type, entry.getBoolean("Baby")));
-            this.processingMobCounts.merge(type, 1, Integer::sum);
-        }
+        readMobQueueFromTag(tag.getList("CapturedQueue", Tag.TAG_COMPOUND), this.capturedMobQueue, false);
+        readMobQueueFromTag(tag.getList("ProcessingQueue", Tag.TAG_COMPOUND), this.processingMobQueue, true);
 
         ListTag outputList = tag.getList("OutputBuffer", Tag.TAG_COMPOUND);
         for (int i = 0; i < outputList.size(); i++) {
@@ -365,6 +325,41 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
             return BuiltInRegistries.ENTITY_TYPE.getOptional(ResourceLocation.parse(id)).orElse(null);
         } catch (IllegalArgumentException ex) {
             return null;
+        }
+    }
+
+    /**
+     * Serializes a mob queue into a compact NBT list used for world persistence.
+     */
+    private static ListTag writeMobQueueToTag(Iterable<CapturedMobData> queue) {
+        ListTag serializedQueue = new ListTag();
+        for (CapturedMobData data : queue) {
+            ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(data.type());
+            if (entityId == null) {
+                continue;
+            }
+            CompoundTag entry = new CompoundTag();
+            entry.putString("Type", entityId.toString());
+            entry.putBoolean("Baby", data.wasBaby());
+            serializedQueue.add(entry);
+        }
+        return serializedQueue;
+    }
+
+    /**
+     * Deserializes a saved queue and optionally rebuilds processing counters.
+     */
+    private void readMobQueueFromTag(ListTag serializedQueue, ArrayDeque<CapturedMobData> targetQueue, boolean rebuildProcessingCounts) {
+        for (int index = 0; index < serializedQueue.size(); index++) {
+            CompoundTag entry = serializedQueue.getCompound(index);
+            EntityType<?> entityType = parseEntityType(entry.getString("Type"));
+            if (entityType == null) {
+                continue;
+            }
+            targetQueue.addLast(new CapturedMobData(entityType, entry.getBoolean("Baby")));
+            if (rebuildProcessingCounts) {
+                this.processingMobCounts.merge(entityType, 1, Integer::sum);
+            }
         }
     }
 
@@ -392,7 +387,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
             }
         }
 
-        this.setChanged();
+        markDirty();
     }
 
     private static int clampArea(int value) {
@@ -452,6 +447,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 
     private int getEffectiveMobProcessInterval() {
         int baseInterval = ServerSettings.getMobProcessIntervalTicks();
+        // Sharpness compounds processing speed for more visible high-tier upgrades.
         double speedMultiplier = Math.pow(SHARPNESS_SPEED_MULTIPLIER_PER_LEVEL, Math.max(0, getSharpnessUpgradeLevel()));
         return (int) Math.ceil(baseInterval / speedMultiplier);
     }
@@ -459,6 +455,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
     private int getEffectiveProcessingRoundEnergyCost() {
         int sharpnessLevel = Math.max(0, getSharpnessUpgradeLevel());
         int unbreakingLevel = Math.max(0, getUnbreakingUpgradeLevel());
+        // Sharpness trades efficiency for speed; unbreaking offsets that via multiplicative reduction.
         double sharpnessMultiplier = Math.pow(SHARPNESS_RF_MULTIPLIER_PER_LEVEL, sharpnessLevel);
         double unbreakingReduction = Math.min(
                 UNBREAKING_MAX_RF_REDUCTION,
@@ -515,7 +512,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         }
 
         this.tank.drain(FluidType.BUCKET_VOLUME, IFluidHandler.FluidAction.EXECUTE);
-        this.setChanged();
+        markDirty();
         return true;
     }
 
@@ -525,7 +522,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 
     public void extractOneBucketFromTank() {
         this.tank.drain(FluidType.BUCKET_VOLUME, IFluidHandler.FluidAction.EXECUTE);
-        this.setChanged();
+        markDirty();
     }
 
     public boolean insertBucketIntoTank(Player player, InteractionHand hand) {
@@ -546,7 +543,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
             }
         }
 
-        this.setChanged();
+        markDirty();
         return true;
     }
 
@@ -556,7 +553,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 
     public void insertOneBucketIntoTank() {
         this.tank.fill(new FluidStack(EssenceExtractor.EXPERIENCE_FLUID.get(), FluidType.BUCKET_VOLUME), IFluidHandler.FluidAction.EXECUTE);
-        this.setChanged();
+        markDirty();
     }
 
     public static void serverTick(Level level, BlockPos pos, BlockState state, EssenceExtractorBlockEntity blockEntity) {
@@ -564,6 +561,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
             return;
         }
 
+        // Always try to drain overflow first so active processing has room for fresh drops.
         blockEntity.flushOutputBufferToMachine();
 
         blockEntity.captureTicks++;
@@ -587,18 +585,18 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
     }
 
     private void captureItems(Level level, BlockPos pos) {
-        AABB box = buildCaptureAABB(pos);
-        for (ItemEntity itemEntity : level.getEntitiesOfClass(ItemEntity.class, box)) {
-            ItemStack original = itemEntity.getItem();
-            if (!canInsertIntoMachine(original)) {
+        AABB captureArea = buildCaptureAABB(pos);
+        for (ItemEntity droppedItem : level.getEntitiesOfClass(ItemEntity.class, captureArea)) {
+            ItemStack droppedStack = droppedItem.getItem();
+            if (!canInsertIntoMachine(droppedStack)) {
                 continue;
             }
 
-            ItemStack remaining = insertIntoMachine(itemEntity.getItem().copy());
+            ItemStack remaining = insertIntoMachine(droppedStack.copy());
             if (remaining.isEmpty()) {
-                itemEntity.discard();
+                droppedItem.discard();
             } else {
-                itemEntity.setItem(remaining);
+                droppedItem.setItem(remaining);
             }
         }
     }
@@ -626,13 +624,13 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
     }
 
     private void captureExperience(Level level, BlockPos pos) {
-        AABB box = buildCaptureAABB(pos);
-        int space = this.tank.getSpace();
-        if (space <= 0) {
+        AABB captureArea = buildCaptureAABB(pos);
+        int availableTankSpace = this.tank.getSpace();
+        if (availableTankSpace <= 0) {
             return;
         }
 
-        for (ExperienceOrb orb : level.getEntitiesOfClass(ExperienceOrb.class, box)) {
+        for (ExperienceOrb orb : level.getEntitiesOfClass(ExperienceOrb.class, captureArea)) {
             int orbMb = Math.max(1, orb.getValue() * MB_PER_XP);
             if (orbMb > this.tank.getSpace()) {
                 continue;
@@ -646,9 +644,9 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
     }
 
     private void captureMobs(Level level, BlockPos pos) {
-        AABB box = buildCaptureAABB(pos);
+        AABB captureArea = buildCaptureAABB(pos);
         boolean changed = false;
-        for (Mob mob : level.getEntitiesOfClass(Mob.class, box, Mob::isAlive)) {
+        for (Mob mob : level.getEntitiesOfClass(Mob.class, captureArea, Mob::isAlive)) {
             if (hasEquipment(mob)) {
                 continue;
             }
@@ -658,22 +656,19 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         }
 
         if (changed) {
-            this.setChanged();
-            if (this.level != null && !this.level.isClientSide()) {
-                this.level.sendBlockUpdated(this.worldPosition, getBlockState(), getBlockState(), 3);
-            }
+            markDirtyAndSync();
         }
     }
 
-    private void processCapturedMobs(Level level, BlockPos pos) {
+    private void processCapturedMobs(Level level, BlockPos machinePos) {
         if (!(level instanceof ServerLevel serverLevel)) {
             return;
         }
-        // Two-step processing:
-        // 1) Move 50% from queued -> processing list (UI visible, no outputs yet).
-        // 2) On next process cycle, resolve processing list into drops/xp outputs.
+        // Two-phase flow:
+        // 1) Build a processing batch from the queue.
+        // 2) On next process interval, consume one round of RF and resolve that full batch.
         if (!this.processingMobQueue.isEmpty()) {
-            finishProcessingBatch(serverLevel, pos);
+            finishProcessingBatch(serverLevel, machinePos);
             return;
         }
 
@@ -690,6 +685,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         this.processingMobCounts.clear();
         int totalQueued = this.capturedMobQueue.size();
         int toProcess;
+        // Small queues drain fully; larger queues use base-10 + 50% overflow rule.
         if (totalQueued <= 10) {
             toProcess = totalQueued;
         } else {
@@ -704,13 +700,10 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         this.currentBatchTotal = this.processingMobQueue.size();
         this.currentBatchProcessed = 0;
 
-        this.setChanged();
-        if (this.level != null && !this.level.isClientSide()) {
-            this.level.sendBlockUpdated(this.worldPosition, getBlockState(), getBlockState(), 3);
-        }
+        markDirtyAndSync();
     }
 
-    private void finishProcessingBatch(ServerLevel level, BlockPos pos) {
+    private void finishProcessingBatch(ServerLevel level, BlockPos machinePos) {
         if (!tryConsumeProcessingRoundEnergy()) {
             return;
         }
@@ -719,7 +712,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         while (!this.processingMobQueue.isEmpty()) {
             CapturedMobData data = this.processingMobQueue.removeFirst();
             decrementProcessingCount(data.type());
-            processSingleCapturedMob(level, pos, data);
+            processSingleCapturedMob(level, machinePos, data);
             this.currentBatchProcessed++;
             processedAny = true;
         }
@@ -731,14 +724,11 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         }
 
         if (processedAny) {
-            this.setChanged();
-            if (this.level != null && !this.level.isClientSide()) {
-                this.level.sendBlockUpdated(this.worldPosition, getBlockState(), getBlockState(), 3);
-            }
+            markDirtyAndSync();
         }
     }
 
-    private void processSingleCapturedMob(ServerLevel level, BlockPos pos, CapturedMobData capturedMob) {
+    private void processSingleCapturedMob(ServerLevel level, BlockPos machinePos, CapturedMobData capturedMob) {
         if (capturedMob.wasBaby()) {
             this.tank.fill(new FluidStack(EssenceExtractor.EXPERIENCE_FLUID.get(), BABY_MOB_XP_MB), IFluidHandler.FluidAction.EXECUTE);
             return;
@@ -748,12 +738,12 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
             return;
         }
 
-        living.setPos(pos.getX() + 0.5D, pos.getY() + 1.0D, pos.getZ() + 0.5D);
+        living.setPos(machinePos.getX() + 0.5D, machinePos.getY() + 1.0D, machinePos.getZ() + 0.5D);
         Player fakePlayer = FakePlayerFactory.get(level, EXTRACTOR_FAKE_PLAYER_PROFILE);
 
         LootParams params = new LootParams.Builder(level)
                 .withParameter(LootContextParams.THIS_ENTITY, living)
-                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(pos))
+                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(machinePos))
                 .withParameter(LootContextParams.DAMAGE_SOURCE, level.damageSources().playerAttack(fakePlayer))
                 .withParameter(LootContextParams.ATTACKING_ENTITY, fakePlayer)
                 .withParameter(LootContextParams.LAST_DAMAGE_PLAYER, fakePlayer)
@@ -831,11 +821,25 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         this.processingMobCounts.put(type, current - 1);
     }
 
-    private void onEnergyChanged() {
-        this.setChanged();
-        if (level != null && !level.isClientSide()) {
-            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+    /**
+     * Marks this block entity as dirty so state is persisted to disk.
+     */
+    private void markDirty() {
+        setChanged();
+    }
+
+    /**
+     * Marks state dirty and pushes a block update so clients refresh GUI data immediately.
+     */
+    private void markDirtyAndSync() {
+        markDirty();
+        if (this.level != null && !this.level.isClientSide()) {
+            this.level.sendBlockUpdated(this.worldPosition, getBlockState(), getBlockState(), 3);
         }
+    }
+
+    private void onEnergyChanged() {
+        markDirtyAndSync();
     }
 
     private static boolean hasEquipment(Mob mob) {
@@ -902,7 +906,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
             pending.shrink(move);
         }
 
-        this.setChanged();
+        markDirty();
     }
 
     private void flushOutputBufferToMachine() {
@@ -932,10 +936,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         }
 
         if (changed) {
-            this.setChanged();
-            if (this.level != null && !this.level.isClientSide()) {
-                this.level.sendBlockUpdated(this.worldPosition, getBlockState(), getBlockState(), 3);
-            }
+            markDirtyAndSync();
         }
     }
 

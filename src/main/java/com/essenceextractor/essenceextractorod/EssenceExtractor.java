@@ -116,6 +116,17 @@ public class EssenceExtractor {
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(this::registerCapabilities);
 
+        registerDeferredRegisters(modEventBus);
+
+        NeoForge.EVENT_BUS.register(this);
+
+        modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+    }
+
+    /**
+     * Keeps registration wiring in one place so the constructor stays easy to scan.
+     */
+    private static void registerDeferredRegisters(IEventBus modEventBus) {
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
@@ -123,10 +134,6 @@ public class EssenceExtractor {
         BLOCK_ENTITY_TYPES.register(modEventBus);
         FLUID_TYPES.register(modEventBus);
         FLUIDS.register(modEventBus);
-
-        NeoForge.EVENT_BUS.register(this);
-
-        modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }
 
     private void registerCapabilities(RegisterCapabilitiesEvent event) {
@@ -143,7 +150,7 @@ public class EssenceExtractor {
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        LOGGER.info("HELLO FROM COMMON SETUP");
+        LOGGER.info("Essence Extractor common setup");
 
         if (Config.LOG_DIRT_BLOCK.getAsBoolean()) {
             LOGGER.info("DIRT BLOCK >> {}", BuiltInRegistries.BLOCK.getKey(Blocks.DIRT));
@@ -159,6 +166,6 @@ public class EssenceExtractor {
         LOGGER.info("Essence Extractor server settings loaded: minCaptureTicks={}, minProcessPercent={}",
                 ServerSettings.getMinCaptureTicks(),
                 ServerSettings.getMinProcessPercent());
-        LOGGER.info("HELLO from server starting");
+        LOGGER.info("Essence Extractor server startup complete");
     }
 }

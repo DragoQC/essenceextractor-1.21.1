@@ -26,6 +26,7 @@ public class EssenceExtractorClient {
     }
 
     private void registerClientExtensions(RegisterClientExtensionsEvent event) {
+        // Keep fluid textures centralized so tank rendering and world blocks stay visually consistent.
         event.registerFluidType(new IClientFluidTypeExtensions() {
             private static final ResourceLocation STILL = ResourceLocation.fromNamespaceAndPath(EssenceExtractor.MODID, "block/experience_still");
             private static final ResourceLocation FLOWING = ResourceLocation.fromNamespaceAndPath(EssenceExtractor.MODID, "block/experience_flow");

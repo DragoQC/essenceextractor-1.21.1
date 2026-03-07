@@ -14,6 +14,13 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.entity.player.Inventory;
 
+/**
+ * Custom machine screen with:
+ * - top mob-queue summary
+ * - machine + player inventories
+ * - XP and RF vertical bars
+ * - draggable config overlay
+ */
 public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtractorMenu> {
     private static final int MOB_GRID_VISIBLE = 2;
     private static final int MOB_GRID_TOTAL = 20;
@@ -229,8 +236,58 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
         this.mobScroll = Math.max(0, Math.min(maxScroll, this.mobScroll + delta));
     }
 
-    private void updateMobScrollButtons(int maxScroll) {
-        // Scroll buttons intentionally removed; list uses mouse wheel only.
+    private void drawSlotFrame(GuiGraphics guiGraphics, int slotX, int slotY) {
+        guiGraphics.fill(slotX, slotY, slotX + 18, slotY + 18, 0xFF2B2B2B);
+        guiGraphics.fill(slotX + 1, slotY + 1, slotX + 17, slotY + 17, 0xFF9A9A9A);
+    }
+
+    private void drawSlotGrid(GuiGraphics guiGraphics, int startX, int startY, int columns, int rows) {
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < columns; col++) {
+                drawSlotFrame(guiGraphics, startX + col * 18, startY + row * 18);
+            }
+        }
+    }
+
+    private void drawVerticalTank(GuiGraphics guiGraphics, int x1, int y1, int width, int height, int fillHeight,
+                                  int storedAmount, int capacity, int fillColor, int surfaceColor, int markColor) {
+        int x2 = x1 + width;
+        int y2 = y1 + height;
+        guiGraphics.fill(x1, y1, x2, y2, 0xFF1E1E1E);
+        guiGraphics.fill(x1 + 1, y1 + 1, x2 - 1, y2 - 1, 0xFF3C3C3C);
+
+        int safeCapacity = Math.max(capacity, 1);
+        int safeAmount = Math.max(0, storedAmount);
+        int renderedFill = Math.min(fillHeight, safeAmount * fillHeight / safeCapacity);
+        if (safeAmount > 0 && renderedFill == 0) {
+            renderedFill = 1;
+        }
+        if (renderedFill > 0) {
+            guiGraphics.fill(x1 + 2, y2 - 2 - renderedFill, x2 - 2, y2 - 2, fillColor);
+            int surfaceY = y2 - 2 - renderedFill;
+            guiGraphics.fill(x1 + 2, surfaceY, x2 - 2, Math.min(surfaceY + 1, y2 - 2), surfaceColor);
+        }
+
+        // Reuse 8 marks to match XP bucket mental model.
+        for (int markIndex = 1; markIndex < 8; markIndex++) {
+            int markY = y2 - 2 - (markIndex * 50 / 8);
+            guiGraphics.fill(x1 + 2, markY, x2 - 2, markY + 1, markColor);
+        }
+    }
+
+    private void drawMobScrollBar(GuiGraphics guiGraphics, int leftPos, int topPos, int entryCount) {
+        int trackX1 = leftPos + 144;
+        int trackY1 = topPos + 42;
+        int trackX2 = leftPos + 147;
+        int trackY2 = topPos + 64;
+        int trackHeight = trackY2 - trackY1;
+        int handleHeight = Math.max(8, trackHeight * MOB_GRID_VISIBLE / entryCount);
+        int scrollRange = Math.max(1, entryCount - MOB_GRID_VISIBLE);
+        int handleTravel = Math.max(0, trackHeight - handleHeight);
+        int handleY = trackY1 + (this.mobScroll * handleTravel / scrollRange);
+
+        guiGraphics.fill(trackX1, trackY1, trackX2, trackY2, 0xAA202020);
+        guiGraphics.fill(trackX1, handleY, trackX2, handleY + handleHeight, 0xFFD0D0D0);
     }
 
     @Override
@@ -238,9 +295,11 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
         int x = this.leftPos;
         int y = this.topPos;
 
+        // Base panel chrome.
         guiGraphics.fill(x, y, x + this.imageWidth, y + this.imageHeight, 0xFF4B4B4B);
         guiGraphics.fill(x + 1, y + 1, x + this.imageWidth - 1, y + this.imageHeight - 1, 0xFF6B6B6B);
 
+        // Top queue info panel.
         guiGraphics.fill(x + 6, y + 6, x + 148, y + 66, 0xFF1F1F1F);
         guiGraphics.fill(x + 7, y + 7, x + 147, y + 65, 0xFF2A2A2A);
 
@@ -252,7 +311,6 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
         }
         int maxScroll = Math.max(0, displaySlots.size() - MOB_GRID_VISIBLE);
         this.mobScroll = Math.max(0, Math.min(this.mobScroll, maxScroll));
-        updateMobScrollButtons(maxScroll);
 
         guiGraphics.drawString(this.font, Component.literal("Queued: " + this.menu.getTotalQueuedMobs()), x + 8, y + 10, 0xFFFFFFFF, false);
         guiGraphics.drawString(this.font, Component.literal("Processing: " + this.menu.getTotalProcessingMobs()), x + 8, y + 20, 0xFFFFFFFF, false);
@@ -276,18 +334,7 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
             guiGraphics.drawString(this.font, Component.literal(text), x + 8, lineY, 0xFFFFFFFF, false);
         }
         if (displaySlots.size() > MOB_GRID_VISIBLE) {
-            int trackX1 = x + 144;
-            int trackY1 = y + 42;
-            int trackX2 = x + 147;
-            int trackY2 = y + 64;
-            int trackHeight = trackY2 - trackY1;
-            int handleHeight = Math.max(8, trackHeight * MOB_GRID_VISIBLE / displaySlots.size());
-            int scrollRange = Math.max(1, displaySlots.size() - MOB_GRID_VISIBLE);
-            int handleTravel = Math.max(0, trackHeight - handleHeight);
-            int handleY = trackY1 + (this.mobScroll * handleTravel / scrollRange);
-
-            guiGraphics.fill(trackX1, trackY1, trackX2, trackY2, 0xAA202020);
-            guiGraphics.fill(trackX1, handleY, trackX2, handleY + handleHeight, 0xFFD0D0D0);
+            drawMobScrollBar(guiGraphics, x, y, displaySlots.size());
         }
 
         // Separate lower section into two clear boxes: machine inventory and dual-tank panel.
@@ -301,16 +348,14 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
         int lootSlotY = y + 28;
         int unbreakingSlotX = x + 150;
         int unbreakingSlotY = y + 50;
-        guiGraphics.fill(sharpSlotX - 1, sharpSlotY - 1, sharpSlotX + 17, sharpSlotY + 17, 0xFF2B2B2B);
-        guiGraphics.fill(sharpSlotX, sharpSlotY, sharpSlotX + 16, sharpSlotY + 16, 0xFF9A9A9A);
-        guiGraphics.fill(sharpSlotX - 1, lootSlotY - 1, sharpSlotX + 17, lootSlotY + 17, 0xFF2B2B2B);
-        guiGraphics.fill(sharpSlotX, lootSlotY, sharpSlotX + 16, lootSlotY + 16, 0xFF9A9A9A);
-        guiGraphics.fill(unbreakingSlotX - 1, unbreakingSlotY - 1, unbreakingSlotX + 17, unbreakingSlotY + 17, 0xFF2B2B2B);
-        guiGraphics.fill(unbreakingSlotX, unbreakingSlotY, unbreakingSlotX + 16, unbreakingSlotY + 16, 0xFF9A9A9A);
+        drawSlotFrame(guiGraphics, sharpSlotX - 1, sharpSlotY - 1);
+        drawSlotFrame(guiGraphics, sharpSlotX - 1, lootSlotY - 1);
+        drawSlotFrame(guiGraphics, unbreakingSlotX - 1, unbreakingSlotY - 1);
         drawUpgradeLetter(guiGraphics, this.menu.slots.get(this.menu.getSharpnessMenuSlotIndex()), sharpSlotX, sharpSlotY, "S");
         drawUpgradeLetter(guiGraphics, this.menu.slots.get(this.menu.getLootingMenuSlotIndex()), sharpSlotX, lootSlotY, "L");
         drawUpgradeLetter(guiGraphics, this.menu.slots.get(this.menu.getUnbreakingMenuSlotIndex()), unbreakingSlotX, unbreakingSlotY, "U");
 
+        // Current batch progress line (left->right fill).
         int progressPercent = Math.max(0, Math.min(100, this.menu.getProcessingProgressPercent()));
         int progressFillWidth = INFO_PROGRESS_WIDTH * progressPercent / 100;
         int progressX1 = x + INFO_PROGRESS_X_OFFSET;
@@ -320,30 +365,9 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
             guiGraphics.fill(progressX1, progressY1, progressX1 + progressFillWidth, progressY1 + INFO_PROGRESS_HEIGHT, 0xFF1CB7F6);
         }
 
-        for (int row = 0; row < 3; row++) {
-            for (int col = 0; col < 7; col++) {
-                int slotX = x + 7 + col * 18;
-                int slotY = y + 73 + row * 18;
-                guiGraphics.fill(slotX, slotY, slotX + 18, slotY + 18, 0xFF2B2B2B);
-                guiGraphics.fill(slotX + 1, slotY + 1, slotX + 17, slotY + 17, 0xFF9A9A9A);
-            }
-        }
-
-        for (int row = 0; row < 3; row++) {
-            for (int col = 0; col < 9; col++) {
-                int slotX = x + 7 + col * 18;
-                int slotY = y + 149 + row * 18;
-                guiGraphics.fill(slotX, slotY, slotX + 18, slotY + 18, 0xFF2B2B2B);
-                guiGraphics.fill(slotX + 1, slotY + 1, slotX + 17, slotY + 17, 0xFF9A9A9A);
-            }
-        }
-
-        for (int col = 0; col < 9; col++) {
-            int slotX = x + 7 + col * 18;
-            int slotY = y + 207;
-            guiGraphics.fill(slotX, slotY, slotX + 18, slotY + 18, 0xFF2B2B2B);
-            guiGraphics.fill(slotX + 1, slotY + 1, slotX + 17, slotY + 17, 0xFF9A9A9A);
-        }
+        drawSlotGrid(guiGraphics, x + 7, y + 73, 7, 3);
+        drawSlotGrid(guiGraphics, x + 7, y + 149, 9, 3);
+        drawSlotGrid(guiGraphics, x + 7, y + 207, 9, 1);
 
         for (int col = 0; col <= 9; col++) {
             int gx = x + 7 + col * 18;
@@ -360,55 +384,31 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
         guiGraphics.fill(x + 7, y + 207, x + 169, y + 208, 0x77444444);
         guiGraphics.fill(x + 7, y + 225, x + 169, y + 226, 0x77444444);
 
-        int tankX1 = x + 156;
-        int tankY1 = y + 74;
-        int tankX2 = x + 168;
-        int tankY2 = y + 126;
-        guiGraphics.fill(tankX1, tankY1, tankX2, tankY2, 0xFF1E1E1E);
-        guiGraphics.fill(tankX1 + 1, tankY1 + 1, tankX2 - 1, tankY2 - 1, 0xFF3C3C3C);
-
-        int capacity = Math.max(this.menu.getFluidCapacity(), 1);
-        int amount = Math.max(0, this.menu.getFluidAmount());
-        int height = Math.min(TANK_RENDER_FILL_HEIGHT, amount * TANK_RENDER_FILL_HEIGHT / capacity);
-        if (amount > 0 && height == 0) {
-            height = 1;
-        }
-        if (height > 0) {
-            guiGraphics.fill(tankX1 + 2, tankY2 - 2 - height, tankX2 - 2, tankY2 - 2, 0xFF6AFF2E);
-        }
-        // Brighter top strip for "liquid surface" effect.
-        if (height > 0) {
-            int surfaceY = tankY2 - 2 - height;
-            guiGraphics.fill(tankX1 + 2, surfaceY, tankX2 - 2, Math.min(surfaceY + 1, tankY2 - 2), 0xFFB8FF7A);
-        }
-        // Marks every 4 buckets (32 bucket tank = 8 marks) to make fill easier to read.
-        for (int i = 1; i < 8; i++) {
-            int markY = tankY2 - 2 - (i * 50 / 8);
-            guiGraphics.fill(tankX1 + 2, markY, tankX2 - 2, markY + 1, 0x774D4D4D);
-        }
-
-        int energyTankX1 = x + ENERGY_TANK_X_OFFSET;
-        int energyTankY1 = y + ENERGY_TANK_Y_OFFSET;
-        int energyTankX2 = energyTankX1 + ENERGY_TANK_WIDTH;
-        int energyTankY2 = energyTankY1 + ENERGY_TANK_HEIGHT;
-        guiGraphics.fill(energyTankX1, energyTankY1, energyTankX2, energyTankY2, 0xFF1E1E1E);
-        guiGraphics.fill(energyTankX1 + 1, energyTankY1 + 1, energyTankX2 - 1, energyTankY2 - 1, 0xFF3C3C3C);
-
-        int energyCapacity = Math.max(this.menu.getEnergyCapacity(), 1);
-        int energyAmount = Math.max(0, this.menu.getEnergyStored());
-        int energyHeight = Math.min(ENERGY_TANK_RENDER_FILL_HEIGHT, energyAmount * ENERGY_TANK_RENDER_FILL_HEIGHT / energyCapacity);
-        if (energyAmount > 0 && energyHeight == 0) {
-            energyHeight = 1;
-        }
-        if (energyHeight > 0) {
-            guiGraphics.fill(energyTankX1 + 2, energyTankY2 - 2 - energyHeight, energyTankX2 - 2, energyTankY2 - 2, 0xFFE53030);
-            int surfaceY = energyTankY2 - 2 - energyHeight;
-            guiGraphics.fill(energyTankX1 + 2, surfaceY, energyTankX2 - 2, Math.min(surfaceY + 1, energyTankY2 - 2), 0xFFFF6A6A);
-        }
-        for (int i = 1; i < 8; i++) {
-            int markY = energyTankY2 - 2 - (i * 50 / 8);
-            guiGraphics.fill(energyTankX1 + 2, markY, energyTankX2 - 2, markY + 1, 0x775A2C2C);
-        }
+        drawVerticalTank(
+                guiGraphics,
+                x + TANK_X_OFFSET,
+                y + TANK_Y_OFFSET,
+                TANK_WIDTH,
+                TANK_HEIGHT,
+                TANK_RENDER_FILL_HEIGHT,
+                this.menu.getFluidAmount(),
+                this.menu.getFluidCapacity(),
+                0xFF6AFF2E,
+                0xFFB8FF7A,
+                0x774D4D4D);
+        // RF tank uses a red palette but reuses the same shape/markers as XP for consistency.
+        drawVerticalTank(
+                guiGraphics,
+                x + ENERGY_TANK_X_OFFSET,
+                y + ENERGY_TANK_Y_OFFSET,
+                ENERGY_TANK_WIDTH,
+                ENERGY_TANK_HEIGHT,
+                ENERGY_TANK_RENDER_FILL_HEIGHT,
+                this.menu.getEnergyStored(),
+                this.menu.getEnergyCapacity(),
+                0xFFE53030,
+                0xFFFF6A6A,
+                0x775A2C2C);
 
         int toggleX1 = x + TOGGLE_X_OFFSET;
         int toggleY1 = y + TOGGLE_Y_OFFSET;
