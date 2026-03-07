@@ -141,6 +141,10 @@ public class EssenceExtractor {
                 Capabilities.EnergyStorage.BLOCK,
                 ESSENCE_EXTRACTOR_BLOCK_ENTITY.get(),
                 (blockEntity, side) -> blockEntity.getEnergyStorage());
+        event.registerBlockEntity(
+                Capabilities.FluidHandler.BLOCK,
+                ESSENCE_EXTRACTOR_BLOCK_ENTITY.get(),
+                (blockEntity, side) -> blockEntity.getOutputOnlyFluidHandler());
     }
 
     private static BaseFlowingFluid.Properties createExperienceFluidProperties() {
