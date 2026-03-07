@@ -34,6 +34,8 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.fluids.BaseFlowingFluid;
 import net.neoforged.neoforge.fluids.FluidType;
@@ -112,6 +114,7 @@ public class EssenceExtractor {
 
     public EssenceExtractor(IEventBus modEventBus, ModContainer modContainer) {
         modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(this::registerCapabilities);
 
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
@@ -124,6 +127,13 @@ public class EssenceExtractor {
         NeoForge.EVENT_BUS.register(this);
 
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+    }
+
+    private void registerCapabilities(RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(
+                Capabilities.EnergyStorage.BLOCK,
+                ESSENCE_EXTRACTOR_BLOCK_ENTITY.get(),
+                (blockEntity, side) -> blockEntity.getEnergyStorage());
     }
 
     private static BaseFlowingFluid.Properties createExperienceFluidProperties() {

@@ -52,26 +52,38 @@ import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.FluidType;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
+import net.neoforged.neoforge.energy.EnergyStorage;
+import net.neoforged.neoforge.energy.IEnergyStorage;
 import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.items.ItemStackHandler;
 
 public class EssenceExtractorBlockEntity extends BlockEntity implements net.minecraft.world.MenuProvider {
-    public static final int SLOT_COUNT = 24;
-    public static final int UPGRADE_SLOT_COUNT = 2;
+    public static final int SLOT_COUNT = 21;
+    public static final int UPGRADE_SLOT_COUNT = 3;
     public static final int SHARPNESS_SLOT = 0;
     public static final int LOOTING_SLOT = 1;
+    public static final int UNBREAKING_SLOT = 2;
     public static final int FLUID_CAPACITY = FluidType.BUCKET_VOLUME * 32;
+    public static final int BASE_ENERGY_CAPACITY = 5_000;
     public static final int CAPTURED_DISPLAY_COUNT = 20;
     public static final int OUTPUT_BUFFER_CAPACITY = 2048;
     private static final int MB_PER_XP = 20;
     private static final int BABY_MOB_XP_MB = MB_PER_XP;
-    private static final int SMALL_QUEUE_FULL_PROCESS_THRESHOLD = 10;
-    private static final int LARGE_QUEUE_MIN_BATCH = 10;
+    private static final int ENERGY_TRANSFER_RATE = 2_000;
+    private static final int BASE_RF_PER_PROCESSING_ROUND = 1_000;
+    private static final double SHARPNESS_SPEED_MULTIPLIER_PER_LEVEL = 1.12D;
+    private static final double SHARPNESS_RF_MULTIPLIER_PER_LEVEL = 1.10D;
+    private static final double UNBREAKING_RF_REDUCTION_DECAY_PER_LEVEL = 0.90D;
+    private static final double UNBREAKING_MAX_RF_REDUCTION = 0.70D;
+    private static final double UNBREAKING_CAPACITY_MULTIPLIER_PER_LEVEL = 1.15D;
+    private static final double UNBREAKING_MAX_CAPACITY_MULTIPLIER = 4.0D;
     private static final GameProfile EXTRACTOR_FAKE_PLAYER_PROFILE =
             new GameProfile(UUID.fromString("48f5b42d-2085-4f10-8300-36bd1fcc4d49"), "[EssenceExtractor]");
 
     private int captureTicks;
     private int mobProcessTicks;
+    private int currentBatchTotal;
+    private int currentBatchProcessed;
 
     // Symmetric area radii.
     private int areaX = 1;
@@ -112,6 +124,7 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 
         @Override
         protected void onContentsChanged(int slot) {
+            updateEnergyCapacityFromUnbreaking();
             setChanged();
             if (level != null && !level.isClientSide()) {
                 level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
@@ -128,6 +141,8 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
             }
         }
     };
+    private final MachineEnergyStorage energyStorage =
+            new MachineEnergyStorage(BASE_ENERGY_CAPACITY, ENERGY_TRANSFER_RATE, ENERGY_TRANSFER_RATE, this::onEnergyChanged);
 
     public EssenceExtractorBlockEntity(BlockPos pos, BlockState blockState) {
         super(EssenceExtractor.ESSENCE_EXTRACTOR_BLOCK_ENTITY.get(), pos, blockState);
@@ -147,6 +162,18 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 
     public int getFluidCapacity() {
         return this.tank.getCapacity();
+    }
+
+    public IEnergyStorage getEnergyStorage() {
+        return this.energyStorage;
+    }
+
+    public int getEnergyStored() {
+        return this.energyStorage.getEnergyStored();
+    }
+
+    public int getEnergyCapacity() {
+        return this.energyStorage.getMaxEnergyStored();
     }
 
     public int getAreaX() {
@@ -193,12 +220,23 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         return getUpgradeEnchantmentLevel(LOOTING_SLOT, Enchantments.LOOTING);
     }
 
+    public int getUnbreakingUpgradeLevel() {
+        return getUpgradeEnchantmentLevel(UNBREAKING_SLOT, Enchantments.UNBREAKING);
+    }
+
     public int getOutputBufferItemCount() {
         int count = 0;
         for (ItemStack stack : this.outputBuffer) {
             count += stack.getCount();
         }
         return count;
+    }
+
+    public int getProcessingProgressPercent() {
+        if (this.currentBatchTotal <= 0) {
+            return 0;
+        }
+        return Math.min(100, (int) ((this.currentBatchProcessed * 100.0D) / this.currentBatchTotal));
     }
 
     @Override
@@ -208,9 +246,12 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         tag.put("Inventory", this.itemHandler.serializeNBT(registries));
         tag.put("Upgrades", this.upgradeItemHandler.serializeNBT(registries));
         tag.put("Tank", this.tank.writeToNBT(registries, new CompoundTag()));
+        tag.putInt("Energy", this.energyStorage.getEnergyStored());
 
         tag.putInt("CaptureTicks", this.captureTicks);
         tag.putInt("MobProcessTicks", this.mobProcessTicks);
+        tag.putInt("CurrentBatchTotal", this.currentBatchTotal);
+        tag.putInt("CurrentBatchProcessed", this.currentBatchProcessed);
         tag.putInt("AreaX", this.areaX);
         tag.putInt("AreaY", this.areaY);
         tag.putInt("AreaZ", this.areaZ);
@@ -264,9 +305,13 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         this.itemHandler.deserializeNBT(registries, tag.getCompound("Inventory"));
         this.upgradeItemHandler.deserializeNBT(registries, tag.getCompound("Upgrades"));
         this.tank.readFromNBT(registries, tag.getCompound("Tank"));
+        updateEnergyCapacityFromUnbreaking();
+        this.energyStorage.setStoredEnergy(tag.contains("Energy") ? tag.getInt("Energy") : 0);
 
         this.captureTicks = tag.getInt("CaptureTicks");
         this.mobProcessTicks = tag.getInt("MobProcessTicks");
+        this.currentBatchTotal = Math.max(0, tag.getInt("CurrentBatchTotal"));
+        this.currentBatchProcessed = Math.max(0, tag.getInt("CurrentBatchProcessed"));
         this.areaX = clampArea(tag.contains("AreaX") ? tag.getInt("AreaX") : this.areaX);
         this.areaY = clampArea(tag.contains("AreaY") ? tag.getInt("AreaY") : this.areaY);
         this.areaZ = clampArea(tag.contains("AreaZ") ? tag.getInt("AreaZ") : this.areaZ);
@@ -374,8 +419,12 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
         if (!stack.is(Items.ENCHANTED_BOOK)) {
             return false;
         }
-        // Accept enchanted books in either upgrade slot; exact enchant effect is read during processing.
-        return slot == SHARPNESS_SLOT || slot == LOOTING_SLOT;
+        return switch (slot) {
+            case SHARPNESS_SLOT -> getEnchantmentLevel(stack, Enchantments.SHARPNESS) > 0;
+            case LOOTING_SLOT -> getEnchantmentLevel(stack, Enchantments.LOOTING) > 0;
+            case UNBREAKING_SLOT -> getEnchantmentLevel(stack, Enchantments.UNBREAKING) > 0;
+            default -> false;
+        };
     }
 
     private int getUpgradeEnchantmentLevel(int slot, ResourceKey<Enchantment> enchantmentKey) {
@@ -403,16 +452,42 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 
     private int getEffectiveMobProcessInterval() {
         int baseInterval = ServerSettings.getMobProcessIntervalTicks();
-        int speedBonusPercent = getScaledUpgradeBonus(getSharpnessUpgradeLevel());
-        double speedMultiplier = 1.0D + (speedBonusPercent / 100.0D);
+        double speedMultiplier = Math.pow(SHARPNESS_SPEED_MULTIPLIER_PER_LEVEL, Math.max(0, getSharpnessUpgradeLevel()));
         return (int) Math.ceil(baseInterval / speedMultiplier);
     }
 
-    private static int getScaledUpgradeBonus(int level) {
-        if (level <= 0) {
-            return 0;
+    private int getEffectiveProcessingRoundEnergyCost() {
+        int sharpnessLevel = Math.max(0, getSharpnessUpgradeLevel());
+        int unbreakingLevel = Math.max(0, getUnbreakingUpgradeLevel());
+        double sharpnessMultiplier = Math.pow(SHARPNESS_RF_MULTIPLIER_PER_LEVEL, sharpnessLevel);
+        double unbreakingReduction = Math.min(
+                UNBREAKING_MAX_RF_REDUCTION,
+                1.0D - Math.pow(UNBREAKING_RF_REDUCTION_DECAY_PER_LEVEL, unbreakingLevel));
+        double unbreakingMultiplier = Math.max(0.0D, 1.0D - unbreakingReduction);
+        return Math.max(1, (int) Math.ceil(BASE_RF_PER_PROCESSING_ROUND * sharpnessMultiplier * unbreakingMultiplier));
+    }
+
+    private boolean tryConsumeProcessingRoundEnergy() {
+        int cost = getEffectiveProcessingRoundEnergyCost();
+        if (this.energyStorage.extractEnergy(cost, true) < cost) {
+            return false;
         }
-        return (level * 4) + 6;
+        this.energyStorage.extractEnergy(cost, false);
+        return true;
+    }
+
+    private void updateEnergyCapacityFromUnbreaking() {
+        int previousCapacity = this.energyStorage.getMaxEnergyStored();
+        int unbreakingLevel = Math.max(0, getUnbreakingUpgradeLevel());
+        double capacityMultiplier = Math.min(
+                UNBREAKING_MAX_CAPACITY_MULTIPLIER,
+                Math.pow(UNBREAKING_CAPACITY_MULTIPLIER_PER_LEVEL, unbreakingLevel));
+        int newCapacity = (int) Math.ceil(BASE_ENERGY_CAPACITY * capacityMultiplier);
+        if (newCapacity == previousCapacity) {
+            return;
+        }
+        this.energyStorage.setCapacity(newCapacity);
+        this.energyStorage.setStoredEnergy(Math.min(this.energyStorage.getEnergyStored(), newCapacity));
     }
 
     public boolean handleBucketInteraction(Player player, InteractionHand hand) {
@@ -607,24 +682,27 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 
     private void startProcessingBatch() {
         if (this.capturedMobQueue.isEmpty()) {
+            this.currentBatchTotal = 0;
+            this.currentBatchProcessed = 0;
             return;
         }
 
         this.processingMobCounts.clear();
         int totalQueued = this.capturedMobQueue.size();
         int toProcess;
-        if (totalQueued <= SMALL_QUEUE_FULL_PROCESS_THRESHOLD) {
-            // Small queues are fully drained to avoid getting "stuck" at low counts.
+        if (totalQueued <= 10) {
             toProcess = totalQueued;
         } else {
-            // Larger queues process 50%, but never fewer than 10 in one batch.
-            toProcess = Math.max(LARGE_QUEUE_MIN_BATCH, (int) Math.ceil(totalQueued * 0.5D));
+            int aboveBase = totalQueued - 10;
+            toProcess = 10 + (int) Math.ceil(aboveBase * 0.5D);
         }
         for (int i = 0; i < toProcess && !this.capturedMobQueue.isEmpty(); i++) {
             CapturedMobData data = this.capturedMobQueue.removeFirst();
             this.processingMobQueue.addLast(data);
             this.processingMobCounts.merge(data.type(), 1, Integer::sum);
         }
+        this.currentBatchTotal = this.processingMobQueue.size();
+        this.currentBatchProcessed = 0;
 
         this.setChanged();
         if (this.level != null && !this.level.isClientSide()) {
@@ -633,15 +711,30 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
     }
 
     private void finishProcessingBatch(ServerLevel level, BlockPos pos) {
-        while (!this.processingMobQueue.isEmpty()) {
-            CapturedMobData data = this.processingMobQueue.removeFirst();
-            processSingleCapturedMob(level, pos, data);
+        if (!tryConsumeProcessingRoundEnergy()) {
+            return;
         }
 
-        this.processingMobCounts.clear();
-        this.setChanged();
-        if (this.level != null && !this.level.isClientSide()) {
-            this.level.sendBlockUpdated(this.worldPosition, getBlockState(), getBlockState(), 3);
+        boolean processedAny = false;
+        while (!this.processingMobQueue.isEmpty()) {
+            CapturedMobData data = this.processingMobQueue.removeFirst();
+            decrementProcessingCount(data.type());
+            processSingleCapturedMob(level, pos, data);
+            this.currentBatchProcessed++;
+            processedAny = true;
+        }
+
+        if (this.processingMobQueue.isEmpty()) {
+            this.processingMobCounts.clear();
+            this.currentBatchTotal = 0;
+            this.currentBatchProcessed = 0;
+        }
+
+        if (processedAny) {
+            this.setChanged();
+            if (this.level != null && !this.level.isClientSide()) {
+                this.level.sendBlockUpdated(this.worldPosition, getBlockState(), getBlockState(), 3);
+            }
         }
     }
 
@@ -668,9 +761,9 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 
         var lootTableKey = living.getLootTable();
         for (ItemStack stack : level.getServer().reloadableRegistries().getLootTable(lootTableKey).getRandomItems(params)) {
-            int looting = getScaledUpgradeBonus(getLootingUpgradeLevel());
-            if (looting > 0 && !stack.isEmpty()) {
-                stack.grow(level.random.nextInt(looting + 1));
+            int lootingLevel = getLootingUpgradeLevel();
+            if (lootingLevel > 0 && !stack.isEmpty()) {
+                stack.grow(level.random.nextInt(lootingLevel + 1));
             }
             queueProcessedDrop(stack.copy());
         }
@@ -727,6 +820,22 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
             queued.merge(data.type(), 1, Integer::sum);
         }
         return queued;
+    }
+
+    private void decrementProcessingCount(EntityType<?> type) {
+        int current = this.processingMobCounts.getOrDefault(type, 0);
+        if (current <= 1) {
+            this.processingMobCounts.remove(type);
+            return;
+        }
+        this.processingMobCounts.put(type, current - 1);
+    }
+
+    private void onEnergyChanged() {
+        this.setChanged();
+        if (level != null && !level.isClientSide()) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
     }
 
     private static boolean hasEquipment(Mob mob) {
@@ -831,6 +940,44 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
     }
 
     private record CapturedMobData(EntityType<?> type, boolean wasBaby) {
+    }
+
+    private static final class MachineEnergyStorage extends EnergyStorage {
+        private final Runnable onChanged;
+
+        private MachineEnergyStorage(int capacity, int maxReceive, int maxExtract, Runnable onChanged) {
+            super(capacity, maxReceive, maxExtract);
+            this.onChanged = onChanged;
+        }
+
+        @Override
+        public int receiveEnergy(int maxReceive, boolean simulate) {
+            int received = super.receiveEnergy(maxReceive, simulate);
+            if (!simulate && received > 0) {
+                this.onChanged.run();
+            }
+            return received;
+        }
+
+        @Override
+        public int extractEnergy(int maxExtract, boolean simulate) {
+            int extracted = super.extractEnergy(maxExtract, simulate);
+            if (!simulate && extracted > 0) {
+                this.onChanged.run();
+            }
+            return extracted;
+        }
+
+        private void setStoredEnergy(int energy) {
+            this.energy = Math.max(0, Math.min(this.capacity, energy));
+        }
+
+        private void setCapacity(int capacity) {
+            this.capacity = Math.max(1, capacity);
+            if (this.energy > this.capacity) {
+                this.energy = this.capacity;
+            }
+        }
     }
 
     private AABB buildCaptureAABB(BlockPos machinePos) {

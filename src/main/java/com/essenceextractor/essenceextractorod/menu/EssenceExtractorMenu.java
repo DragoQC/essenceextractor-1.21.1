@@ -22,8 +22,8 @@ import net.neoforged.neoforge.items.ItemStackHandler;
 import net.neoforged.neoforge.items.SlotItemHandler;
 
 public class EssenceExtractorMenu extends AbstractContainerMenu {
-    private static final int MACHINE_DATA_COUNT = 14 + (EssenceExtractorBlockEntity.CAPTURED_DISPLAY_COUNT * 3);
-    private static final int MACHINE_COLUMNS = 8;
+    private static final int MACHINE_DATA_COUNT = 18 + (EssenceExtractorBlockEntity.CAPTURED_DISPLAY_COUNT * 3);
+    private static final int MACHINE_COLUMNS = 7;
     private static final int MACHINE_ROWS = 3;
     private static final int MACHINE_SLOT_COUNT = MACHINE_COLUMNS * MACHINE_ROWS;
     private static final int UPGRADE_SLOT_COUNT = EssenceExtractorBlockEntity.UPGRADE_SLOT_COUNT;
@@ -58,8 +58,9 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
         }
 
         var upgradeHandler = getUpgradeItemHandler(playerInventory, pos);
-        this.addSlot(new SlotItemHandler(upgradeHandler, EssenceExtractorBlockEntity.SHARPNESS_SLOT, 140, 16));
-        this.addSlot(new SlotItemHandler(upgradeHandler, EssenceExtractorBlockEntity.LOOTING_SLOT, 140, 46));
+        this.addSlot(new SlotItemHandler(upgradeHandler, EssenceExtractorBlockEntity.SHARPNESS_SLOT, 150, 6));
+        this.addSlot(new SlotItemHandler(upgradeHandler, EssenceExtractorBlockEntity.LOOTING_SLOT, 150, 28));
+        this.addSlot(new SlotItemHandler(upgradeHandler, EssenceExtractorBlockEntity.UNBREAKING_SLOT, 150, 50));
 
         int playerInvY = 150;
         for (int row = 0; row < 3; row++) {
@@ -102,27 +103,31 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
             return new ContainerData() {
                 @Override
                 public int get(int index) {
-                    if (index < 14) {
+                    if (index < 18) {
                         return switch (index) {
                             case 0 -> blockEntity.getFluidAmount();
                             case 1 -> blockEntity.getFluidCapacity();
-                            case 2 -> blockEntity.getAreaX();
-                            case 3 -> blockEntity.getAreaY();
-                            case 4 -> blockEntity.getAreaZ();
-                            case 5 -> blockEntity.getPosX();
-                            case 6 -> blockEntity.getPosY();
-                            case 7 -> blockEntity.getPosZ();
-                            case 8 -> blockEntity.isShowArea() ? 1 : 0;
-                            case 9 -> blockEntity.getCaptureTickInterval();
-                            case 10 -> blockEntity.getProcessPercent();
-                            case 11 -> blockEntity.getSharpnessUpgradeLevel();
-                            case 12 -> blockEntity.getLootingUpgradeLevel();
-                            case 13 -> blockEntity.getOutputBufferItemCount();
+                            case 2 -> blockEntity.getEnergyStored();
+                            case 3 -> blockEntity.getEnergyCapacity();
+                            case 4 -> blockEntity.getAreaX();
+                            case 5 -> blockEntity.getAreaY();
+                            case 6 -> blockEntity.getAreaZ();
+                            case 7 -> blockEntity.getPosX();
+                            case 8 -> blockEntity.getPosY();
+                            case 9 -> blockEntity.getPosZ();
+                            case 10 -> blockEntity.isShowArea() ? 1 : 0;
+                            case 11 -> blockEntity.getCaptureTickInterval();
+                            case 12 -> blockEntity.getProcessPercent();
+                            case 13 -> blockEntity.getSharpnessUpgradeLevel();
+                            case 14 -> blockEntity.getLootingUpgradeLevel();
+                            case 15 -> blockEntity.getUnbreakingUpgradeLevel();
+                            case 16 -> blockEntity.getOutputBufferItemCount();
+                            case 17 -> blockEntity.getProcessingProgressPercent();
                             default -> 0;
                         };
                     }
 
-                    int offset = index - 14;
+                    int offset = index - 18;
                     int slot = offset / 3;
                     int part = offset % 3;
                     return switch (part) {
@@ -157,51 +162,67 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
     }
 
     public int getAreaX() {
-        return this.machineData.get(2);
-    }
-
-    public int getAreaY() {
-        return this.machineData.get(3);
-    }
-
-    public int getAreaZ() {
         return this.machineData.get(4);
     }
 
-    public int getPosX() {
+    public int getAreaY() {
         return this.machineData.get(5);
     }
 
-    public int getPosY() {
+    public int getAreaZ() {
         return this.machineData.get(6);
     }
 
-    public int getPosZ() {
+    public int getPosX() {
         return this.machineData.get(7);
     }
 
-    public boolean isShowArea() {
-        return this.machineData.get(8) != 0;
+    public int getPosY() {
+        return this.machineData.get(8);
     }
 
-    public int getCaptureTickInterval() {
+    public int getPosZ() {
         return this.machineData.get(9);
     }
 
-    public int getProcessPercent() {
-        return this.machineData.get(10);
+    public boolean isShowArea() {
+        return this.machineData.get(10) != 0;
     }
 
-    public int getSharpnessUpgradeLevel() {
+    public int getCaptureTickInterval() {
         return this.machineData.get(11);
     }
 
-    public int getLootingUpgradeLevel() {
+    public int getProcessPercent() {
         return this.machineData.get(12);
     }
 
-    public int getOutputBufferItemCount() {
+    public int getSharpnessUpgradeLevel() {
         return this.machineData.get(13);
+    }
+
+    public int getLootingUpgradeLevel() {
+        return this.machineData.get(14);
+    }
+
+    public int getUnbreakingUpgradeLevel() {
+        return this.machineData.get(15);
+    }
+
+    public int getEnergyStored() {
+        return this.machineData.get(2);
+    }
+
+    public int getEnergyCapacity() {
+        return this.machineData.get(3);
+    }
+
+    public int getOutputBufferItemCount() {
+        return this.machineData.get(16);
+    }
+
+    public int getProcessingProgressPercent() {
+        return this.machineData.get(17);
     }
 
     public BlockPos getBlockPos() {
@@ -209,15 +230,27 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
     }
 
     public int getCapturedMobTypeRawId(int index) {
-        return this.machineData.get(14 + (index * 3));
+        return this.machineData.get(18 + (index * 3));
     }
 
     public int getCapturedMobCount(int index) {
-        return this.machineData.get(15 + (index * 3));
+        return this.machineData.get(19 + (index * 3));
     }
 
     public int getProcessingMobCount(int index) {
-        return this.machineData.get(16 + (index * 3));
+        return this.machineData.get(20 + (index * 3));
+    }
+
+    public int getUnbreakingMenuSlotIndex() {
+        return UPGRADE_START + EssenceExtractorBlockEntity.UNBREAKING_SLOT;
+    }
+
+    public int getSharpnessMenuSlotIndex() {
+        return UPGRADE_START + EssenceExtractorBlockEntity.SHARPNESS_SLOT;
+    }
+
+    public int getLootingMenuSlotIndex() {
+        return UPGRADE_START + EssenceExtractorBlockEntity.LOOTING_SLOT;
     }
 
     public int getTotalQueuedMobs() {
@@ -318,8 +351,10 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
         var enchantments = this.level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
         var sharpness = enchantments.getOrThrow(Enchantments.SHARPNESS);
         var looting = enchantments.getOrThrow(Enchantments.LOOTING);
+        var unbreaking = enchantments.getOrThrow(Enchantments.UNBREAKING);
         boolean hasSharpness = getBookEnchantLevel(stack, sharpness) > 0;
         boolean hasLooting = getBookEnchantLevel(stack, looting) > 0;
+        boolean hasUnbreaking = getBookEnchantLevel(stack, unbreaking) > 0;
 
         if (hasSharpness && this.moveItemStackTo(stack, UPGRADE_START + EssenceExtractorBlockEntity.SHARPNESS_SLOT, UPGRADE_START + EssenceExtractorBlockEntity.SHARPNESS_SLOT + 1, false)) {
             return true;
@@ -327,18 +362,20 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
         if (hasLooting && this.moveItemStackTo(stack, UPGRADE_START + EssenceExtractorBlockEntity.LOOTING_SLOT, UPGRADE_START + EssenceExtractorBlockEntity.LOOTING_SLOT + 1, false)) {
             return true;
         }
-        if (hasSharpness && hasLooting) {
-            // Fallback: if one slot was occupied, allow the other.
+        if (hasUnbreaking && this.moveItemStackTo(stack, UPGRADE_START + EssenceExtractorBlockEntity.UNBREAKING_SLOT, UPGRADE_START + EssenceExtractorBlockEntity.UNBREAKING_SLOT + 1, false)) {
+            return true;
+        }
+        if (hasSharpness || hasLooting || hasUnbreaking) {
+            // Fallbacks: if preferred slot was occupied, allow any matching slot.
             if (this.moveItemStackTo(stack, UPGRADE_START + EssenceExtractorBlockEntity.SHARPNESS_SLOT, UPGRADE_START + EssenceExtractorBlockEntity.SHARPNESS_SLOT + 1, false)) {
                 return true;
             }
             if (this.moveItemStackTo(stack, UPGRADE_START + EssenceExtractorBlockEntity.LOOTING_SLOT, UPGRADE_START + EssenceExtractorBlockEntity.LOOTING_SLOT + 1, false)) {
                 return true;
             }
-        }
-        // Last resort for modded/atypical enchanted books: place into any free upgrade slot.
-        if (this.moveItemStackTo(stack, UPGRADE_START, UPGRADE_START + UPGRADE_SLOT_COUNT, false)) {
-            return true;
+            if (this.moveItemStackTo(stack, UPGRADE_START + EssenceExtractorBlockEntity.UNBREAKING_SLOT, UPGRADE_START + EssenceExtractorBlockEntity.UNBREAKING_SLOT + 1, false)) {
+                return true;
+            }
         }
         return false;
     }
