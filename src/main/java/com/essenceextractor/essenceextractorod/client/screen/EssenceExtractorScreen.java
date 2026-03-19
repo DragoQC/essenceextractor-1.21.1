@@ -3,12 +3,15 @@ package com.essenceextractor.essenceextractormod.client.screen;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.essenceextractor.essenceextractormod.EssenceExtractor;
 import com.essenceextractor.essenceextractormod.menu.EssenceExtractorMenu;
+import com.mojang.blaze3d.systems.RenderSystem;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.inventory.Slot;
@@ -22,36 +25,94 @@ import net.minecraft.world.entity.player.Inventory;
  * - draggable config overlay
  */
 public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtractorMenu> {
-    private static final int MOB_GRID_VISIBLE = 2;
-    private static final int MOB_GRID_TOTAL = 20;
+    private static final int COLOR_WHITE = 0xFFFFFFFF;
+    private static final int COLOR_ACCENT = 0xFFE8C48C;
+    private static final int COLOR_DARK_TEXT = 0xFF2A1A0F;
+    private static final int COLOR_CONFIG_TEXT = 0xFF1A1A1A;
+    private static final int COLOR_PROGRESS_BG = 0xFF1D1D1D;
+    private static final int COLOR_PROGRESS_FILL = 0xFFF2C94C;
+    private static final ResourceLocation MAIN_UI_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+            EssenceExtractor.MODID,
+            "textures/ui/essenceextractor_ui_main.png");
+    private static final ResourceLocation CONFIG_PANEL_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+            EssenceExtractor.MODID,
+            "textures/ui/essenceextractor_ui_config.png");
+    private static final ResourceLocation LEFT_BUTTON_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+            EssenceExtractor.MODID,
+            "textures/ui/essenceextractor_ui_btn_left.png");
+    private static final ResourceLocation LEFT_BUTTON_PRESSED_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+            EssenceExtractor.MODID,
+            "textures/ui/essenceextractor_ui_btn_left_pressed.png");
+    private static final ResourceLocation RIGHT_BUTTON_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+            EssenceExtractor.MODID,
+            "textures/ui/essenceextractor_ui_btn_right.png");
+    private static final ResourceLocation RIGHT_BUTTON_PRESSED_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+            EssenceExtractor.MODID,
+            "textures/ui/essenceextractor_ui_btn_right_pressed.png");
+    private static final ResourceLocation FLOWING_TANK_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+            EssenceExtractor.MODID,
+            "textures/block/experience_flow.png");
+    private static final int MAIN_UI_TEXTURE_WIDTH = 256;
+    private static final int MAIN_UI_TEXTURE_HEIGHT = 256;
+    private static final int CONFIG_PANEL_TEXTURE_WIDTH = 256;
+    private static final int CONFIG_PANEL_TEXTURE_HEIGHT = 256;
+    private static final int FLOW_TEXTURE_WIDTH = 32;
+    private static final int FLOW_TEXTURE_HEIGHT = 1024;
+    private static final int MOB_LIST_VISIBLE_ROWS = 2;
+    private static final int MOB_LIST_TRACKED_TYPES = 20;
     private static final int PANEL_DEFAULT_LEFT_OFFSET = 88;
     private static final int PANEL_DEFAULT_TOP_OFFSET = 24;
-    private static final int PANEL_WIDTH = 84;
-    private static final int PANEL_HEIGHT = 206;
-    private static final int PANEL_HEADER_HEIGHT = 12;
-    private static final int TOGGLE_WIDTH = 5;
-    private static final int TOGGLE_HEIGHT = 5;
-    private static final int TOGGLE_X_OFFSET = 170;
-    private static final int TOGGLE_Y_OFFSET = 1;
-    private static final int ADJUST_BUTTON_WIDTH = 20;
-    private static final int ADJUST_BUTTON_HEIGHT = 16;
-    private static final int SHOW_BUTTON_WIDTH = 78;
-    private static final int SHOW_BUTTON_HEIGHT = 16;
-    private static final int[] ADJUST_ROW_Y_REL_OFFSETS = {16, 36, 56, 88, 108, 128, 160};
-    private static final int TANK_X_OFFSET = 156;
-    private static final int TANK_Y_OFFSET = 74;
-    private static final int TANK_WIDTH = 12;
-    private static final int TANK_HEIGHT = 52;
-    private static final int TANK_RENDER_FILL_HEIGHT = 46;
-    private static final int ENERGY_TANK_X_OFFSET = 142;
-    private static final int ENERGY_TANK_Y_OFFSET = 74;
-    private static final int ENERGY_TANK_WIDTH = 12;
+    private static final int PANEL_WIDTH = 70;
+    private static final int PANEL_HEIGHT = 155;
+    private static final int PANEL_BORDER = 3;
+    private static final int PANEL_HEADER_HEIGHT = 11;
+    private static final int CONFIG_TOGGLE_WIDTH = 5;
+    private static final int CONFIG_TOGGLE_HEIGHT = 5;
+    private static final int CONFIG_TOGGLE_X_OFFSET = 170;
+    private static final int CONFIG_TOGGLE_Y_OFFSET = 1;
+    private static final int ADJUST_BUTTON_WIDTH = 12;
+    private static final int ADJUST_BUTTON_HEIGHT = 11;
+    private static final int SHOW_BUTTON_WIDTH = PANEL_WIDTH - (PANEL_BORDER * 2);
+    private static final int SHOW_BUTTON_HEIGHT = 13;
+    private static final int ADJUST_LEFT_BUTTON_X_OFFSET = 15;
+    private static final int ADJUST_RIGHT_BUTTON_X_OFFSET = 49;
+    private static final int[] ADJUST_ROW_Y_REL_OFFSETS = {14, 29, 44, 68, 83, 98, 122};
+    private static final float CONFIG_TEXT_SCALE = 0.75F;
+    private static final int CONFIG_LABELS_X_OFFSET = 6;
+    private static final int CONFIG_VALUES_CENTER_X_OFFSET = 38;
+    private static final int CONFIG_AREA_HEADER_Y_OFFSET = 5;
+    private static final int CONFIG_AREA_X_Y_OFFSET = 17;
+    private static final int CONFIG_AREA_Y_Y_OFFSET = 32;
+    private static final int CONFIG_AREA_Z_Y_OFFSET = 47;
+    private static final int CONFIG_POSITION_HEADER_Y_OFFSET = 59;
+    private static final int CONFIG_POS_X_Y_OFFSET = 71;
+    private static final int CONFIG_POS_Y_Y_OFFSET = 86;
+    private static final int CONFIG_POS_Z_Y_OFFSET = 101;
+    private static final int CONFIG_TICK_RATE_HEADER_Y_OFFSET = 113;
+    private static final int CONFIG_TICK_RATE_VALUE_Y_OFFSET = 125;
+    private static final int ENERGY_TANK_X_OFFSET = 134;
+    private static final int XP_TANK_X_OFFSET = ENERGY_TANK_X_OFFSET + 17;
+    private static final int XP_TANK_Y_OFFSET = 70;
+    private static final int XP_TANK_WIDTH = 17;
+    private static final int XP_TANK_HEIGHT = 52;
+    private static final int ENERGY_TANK_Y_OFFSET = 70;
+    private static final int ENERGY_TANK_WIDTH = 17;
     private static final int ENERGY_TANK_HEIGHT = 52;
-    private static final int ENERGY_TANK_RENDER_FILL_HEIGHT = 46;
     private static final int INFO_PROGRESS_X_OFFSET = 8;
-    private static final int INFO_PROGRESS_Y_OFFSET = 63;
-    private static final int INFO_PROGRESS_WIDTH = 139;
+    private static final int INFO_PROGRESS_Y_OFFSET = 58;
+    private static final int INFO_PROGRESS_WIDTH = 106;
     private static final int INFO_PROGRESS_HEIGHT = 2;
+    private static final float INVENTORY_TEXT_SCALE = 0.75F;
+    private static final float STATUS_TEXT_SCALE = 0.75F;
+    private static final int STATUS_TEXT_X_OFFSET = 8;
+    private static final int STATUS_TEXT_START_Y_OFFSET = 12;
+    private static final int STATUS_TEXT_LINE_HEIGHT = 10;
+    private static final int STATUS_LIST_START_Y_OFFSET = 42;
+    private static final int STATUS_LIST_LINE_HEIGHT = 10;
+    private static final int MOB_LIST_X_OFFSET = 8;
+    private static final int MOB_LIST_Y_OFFSET = 42;
+    private static final int MOB_LIST_WIDTH = INFO_PROGRESS_WIDTH;
+    private static final int MOB_LIST_HEIGHT = 22;
     private final List<Button> configButtons = new ArrayList<>();
     private Button toggleConfigButton;
     private Button showAreaToggleButton;
@@ -67,7 +128,7 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
         super(menu, playerInventory, title);
         this.imageWidth = 176;
         this.imageHeight = 232;
-        this.inventoryLabelY = 138;
+        this.inventoryLabelY = 124;
     }
 
     @Override
@@ -77,7 +138,7 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
         this.toggleConfigButton = this.addRenderableWidget(Button.builder(Component.empty(), b -> {
             this.configOpen = !this.configOpen;
             updateConfigButtonsVisibility();
-        }).bounds(this.leftPos + TOGGLE_X_OFFSET, this.topPos + TOGGLE_Y_OFFSET, TOGGLE_WIDTH, TOGGLE_HEIGHT).build());
+        }).bounds(this.leftPos + CONFIG_TOGGLE_X_OFFSET, this.topPos + CONFIG_TOGGLE_Y_OFFSET, CONFIG_TOGGLE_WIDTH, CONFIG_TOGGLE_HEIGHT).build());
         this.toggleConfigButton.setAlpha(0.0F);
 
         addConfigButtons();
@@ -104,8 +165,22 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
     }
 
     private void addAdjustRow(int decId, int incId) {
-        Button minus = this.addRenderableWidget(Button.builder(Component.literal("-"), b -> sendMenuButton(decId)).bounds(0, 0, ADJUST_BUTTON_WIDTH, ADJUST_BUTTON_HEIGHT).build());
-        Button plus = this.addRenderableWidget(Button.builder(Component.literal("+"), b -> sendMenuButton(incId)).bounds(0, 0, ADJUST_BUTTON_WIDTH, ADJUST_BUTTON_HEIGHT).build());
+        Button minus = this.addRenderableWidget(new TextureButton(
+                0,
+                0,
+                ADJUST_BUTTON_WIDTH,
+                ADJUST_BUTTON_HEIGHT,
+                LEFT_BUTTON_TEXTURE,
+                LEFT_BUTTON_PRESSED_TEXTURE,
+                b -> sendMenuButton(decId)));
+        Button plus = this.addRenderableWidget(new TextureButton(
+                0,
+                0,
+                ADJUST_BUTTON_WIDTH,
+                ADJUST_BUTTON_HEIGHT,
+                RIGHT_BUTTON_TEXTURE,
+                RIGHT_BUTTON_PRESSED_TEXTURE,
+                b -> sendMenuButton(incId)));
         this.configButtons.add(minus);
         this.configButtons.add(plus);
     }
@@ -115,19 +190,18 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
         int panelY = getConfigPanelY();
 
         if (this.toggleConfigButton != null) {
-            this.toggleConfigButton.setPosition(this.leftPos + TOGGLE_X_OFFSET, this.topPos + TOGGLE_Y_OFFSET);
+            this.toggleConfigButton.setPosition(this.leftPos + CONFIG_TOGGLE_X_OFFSET, this.topPos + CONFIG_TOGGLE_Y_OFFSET);
         }
 
-        int baseX = panelX + 12;
         for (int row = 0; row < ADJUST_ROW_Y_REL_OFFSETS.length; row++) {
             int buttonIndex = row * 2;
             int rowY = panelY + ADJUST_ROW_Y_REL_OFFSETS[row];
-            this.configButtons.get(buttonIndex).setPosition(baseX, rowY);
-            this.configButtons.get(buttonIndex + 1).setPosition(baseX + 46, rowY);
+            this.configButtons.get(buttonIndex).setPosition(panelX + ADJUST_LEFT_BUTTON_X_OFFSET, rowY);
+            this.configButtons.get(buttonIndex + 1).setPosition(panelX + ADJUST_RIGHT_BUTTON_X_OFFSET, rowY);
         }
 
         if (this.showAreaToggleButton != null) {
-            this.showAreaToggleButton.setPosition(panelX + 4, panelY + PANEL_HEIGHT - SHOW_BUTTON_HEIGHT - 2);
+            this.showAreaToggleButton.setPosition(panelX + PANEL_BORDER, panelY + PANEL_HEIGHT - SHOW_BUTTON_HEIGHT - PANEL_BORDER);
         }
     }
 
@@ -208,22 +282,26 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
         }
     }
 
-    private static boolean isMouseInMobGrid(int mouseX, int mouseY, int leftPos, int topPos) {
-        return mouseX >= leftPos + 8 && mouseX <= leftPos + 147 && mouseY >= topPos + 42 && mouseY <= topPos + 64;
+    private static boolean isMouseOverMobList(int mouseX, int mouseY, int leftPos, int topPos) {
+        int x1 = leftPos + MOB_LIST_X_OFFSET;
+        int y1 = topPos + MOB_LIST_Y_OFFSET;
+        int x2 = x1 + MOB_LIST_WIDTH;
+        int y2 = y1 + MOB_LIST_HEIGHT;
+        return mouseX >= x1 && mouseX < x2 && mouseY >= y1 && mouseY < y2;
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (isMouseInMobGrid((int) mouseX, (int) mouseY, this.leftPos, this.topPos)) {
-            scrollMobList(scrollY < 0 ? 1 : -1);
+        if (isMouseOverMobList((int) mouseX, (int) mouseY, this.leftPos, this.topPos)) {
+            scrollMobQueueList(scrollY < 0 ? 1 : -1);
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
-    private int getMobDisplayCount() {
+    private int getVisibleMobEntryCount() {
         int displayCount = 0;
-        for (int i = 0; i < MOB_GRID_TOTAL; i++) {
+        for (int i = 0; i < MOB_LIST_TRACKED_TYPES; i++) {
             if (this.menu.getCapturedMobCount(i) > 0 || this.menu.getProcessingMobCount(i) > 0) {
                 displayCount++;
             }
@@ -231,94 +309,155 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
         return displayCount;
     }
 
-    private void scrollMobList(int delta) {
-        int maxScroll = Math.max(0, getMobDisplayCount() - MOB_GRID_VISIBLE);
+    private void scrollMobQueueList(int delta) {
+        int maxScroll = Math.max(0, getVisibleMobEntryCount() - MOB_LIST_VISIBLE_ROWS);
         this.mobScroll = Math.max(0, Math.min(maxScroll, this.mobScroll + delta));
     }
 
-    private void drawSlotFrame(GuiGraphics guiGraphics, int slotX, int slotY) {
-        guiGraphics.fill(slotX, slotY, slotX + 18, slotY + 18, 0xFF2B2B2B);
-        guiGraphics.fill(slotX + 1, slotY + 1, slotX + 17, slotY + 17, 0xFF9A9A9A);
-    }
-
-    private void drawSlotGrid(GuiGraphics guiGraphics, int startX, int startY, int columns, int rows) {
-        for (int row = 0; row < rows; row++) {
-            for (int col = 0; col < columns; col++) {
-                drawSlotFrame(guiGraphics, startX + col * 18, startY + row * 18);
-            }
-        }
-    }
-
-    private void drawVerticalTank(GuiGraphics guiGraphics, int x1, int y1, int width, int height, int fillHeight,
-                                  int storedAmount, int capacity, int fillColor, int surfaceColor, int markColor) {
-        int x2 = x1 + width;
-        int y2 = y1 + height;
-        guiGraphics.fill(x1, y1, x2, y2, 0xFF1E1E1E);
-        guiGraphics.fill(x1 + 1, y1 + 1, x2 - 1, y2 - 1, 0xFF3C3C3C);
-
+    private int computeTankFillPixels(int storedAmount, int capacity, int renderHeight) {
         int safeCapacity = Math.max(capacity, 1);
         int safeAmount = Math.max(0, storedAmount);
-        int renderedFill = Math.min(fillHeight, safeAmount * fillHeight / safeCapacity);
+        int renderedFill = Math.min(renderHeight, safeAmount * renderHeight / safeCapacity);
         if (safeAmount > 0 && renderedFill == 0) {
-            renderedFill = 1;
+            return 1;
         }
-        if (renderedFill > 0) {
-            guiGraphics.fill(x1 + 2, y2 - 2 - renderedFill, x2 - 2, y2 - 2, fillColor);
-            int surfaceY = y2 - 2 - renderedFill;
-            guiGraphics.fill(x1 + 2, surfaceY, x2 - 2, Math.min(surfaceY + 1, y2 - 2), surfaceColor);
-        }
-
-        // Reuse 8 marks to match XP bucket mental model.
-        for (int markIndex = 1; markIndex < 8; markIndex++) {
-            int markY = y2 - 2 - (markIndex * 50 / 8);
-            guiGraphics.fill(x1 + 2, markY, x2 - 2, markY + 1, markColor);
-        }
+        return renderedFill;
     }
 
-    private void drawMobScrollBar(GuiGraphics guiGraphics, int leftPos, int topPos, int entryCount) {
-        int trackX1 = leftPos + 144;
-        int trackY1 = topPos + 42;
-        int trackX2 = leftPos + 147;
-        int trackY2 = topPos + 64;
-        int trackHeight = trackY2 - trackY1;
-        int handleHeight = Math.max(8, trackHeight * MOB_GRID_VISIBLE / entryCount);
-        int scrollRange = Math.max(1, entryCount - MOB_GRID_VISIBLE);
-        int handleTravel = Math.max(0, trackHeight - handleHeight);
-        int handleY = trackY1 + (this.mobScroll * handleTravel / scrollRange);
+    private void drawTintedFlowTank(GuiGraphics guiGraphics, int x, int y, int width, int height, int filledPixels, int scrollPixels, float r, float g, float b) {
+        if (filledPixels <= 0) {
+            return;
+        }
 
-        guiGraphics.fill(trackX1, trackY1, trackX2, trackY2, 0xAA202020);
-        guiGraphics.fill(trackX1, handleY, trackX2, handleY + handleHeight, 0xFFD0D0D0);
+        int phase = Math.floorMod(-scrollPixels, FLOW_TEXTURE_HEIGHT);
+        int fillTop = y + (height - filledPixels);
+
+        guiGraphics.enableScissor(x, fillTop, x + width, y + height);
+        RenderSystem.setShaderColor(r, g, b, 0.98F);
+
+        int drawn = 0;
+        while (drawn < filledPixels) {
+            int drawY = fillTop + drawn;
+            int drawHeight = Math.min(16, filledPixels - drawn);
+            int sourceV = Math.floorMod(phase + drawn, FLOW_TEXTURE_HEIGHT);
+
+            if (sourceV + drawHeight <= FLOW_TEXTURE_HEIGHT) {
+                guiGraphics.blit(FLOWING_TANK_TEXTURE, x, drawY, 0, sourceV, width, drawHeight, FLOW_TEXTURE_WIDTH, FLOW_TEXTURE_HEIGHT);
+            } else {
+                int firstHeight = FLOW_TEXTURE_HEIGHT - sourceV;
+                guiGraphics.blit(FLOWING_TANK_TEXTURE, x, drawY, 0, sourceV, width, firstHeight, FLOW_TEXTURE_WIDTH, FLOW_TEXTURE_HEIGHT);
+                guiGraphics.blit(FLOWING_TANK_TEXTURE, x, drawY + firstHeight, 0, 0, width, drawHeight - firstHeight, FLOW_TEXTURE_WIDTH, FLOW_TEXTURE_HEIGHT);
+            }
+            drawn += drawHeight;
+        }
+
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        guiGraphics.disableScissor();
+    }
+
+    private void drawScaledStatusText(GuiGraphics guiGraphics, String text, int x, int y, int color) {
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().scale(STATUS_TEXT_SCALE, STATUS_TEXT_SCALE, 1.0F);
+        int scaledX = Math.round(x / STATUS_TEXT_SCALE);
+        int scaledY = Math.round(y / STATUS_TEXT_SCALE);
+        guiGraphics.drawString(this.font, Component.literal(text), scaledX, scaledY, color, false);
+        guiGraphics.pose().popPose();
+    }
+
+    private void drawScaledConfigText(GuiGraphics guiGraphics, String text, int x, int y, int color) {
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().scale(CONFIG_TEXT_SCALE, CONFIG_TEXT_SCALE, 1.0F);
+        int scaledX = Math.round(x / CONFIG_TEXT_SCALE);
+        int scaledY = Math.round(y / CONFIG_TEXT_SCALE);
+        guiGraphics.drawString(this.font, Component.literal(text), scaledX, scaledY, color, false);
+        guiGraphics.pose().popPose();
+    }
+
+    private void drawScaledCenteredConfigText(GuiGraphics guiGraphics, String text, int centerX, int y, int color) {
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().scale(CONFIG_TEXT_SCALE, CONFIG_TEXT_SCALE, 1.0F);
+        int scaledCenterX = Math.round(centerX / CONFIG_TEXT_SCALE);
+        int scaledY = Math.round(y / CONFIG_TEXT_SCALE);
+        int textX = scaledCenterX - (this.font.width(text) / 2);
+        guiGraphics.drawString(this.font, Component.literal(text), textX, scaledY, color, false);
+        guiGraphics.pose().popPose();
+    }
+
+    private List<Integer> collectQueuedMobSlots() {
+        List<Integer> queuedSlots = new ArrayList<>();
+        for (int slot = 0; slot < MOB_LIST_TRACKED_TYPES; slot++) {
+            if (this.menu.getCapturedMobCount(slot) > 0) {
+                queuedSlots.add(slot);
+            }
+        }
+        return queuedSlots;
+    }
+
+    private void drawProcessingProgressBar(GuiGraphics guiGraphics, int guiLeft, int guiTop) {
+        int progressPercent = Math.max(0, Math.min(100, this.menu.getProcessingProgressPercent()));
+        int progressFillWidth = INFO_PROGRESS_WIDTH * progressPercent / 100;
+        int progressX = guiLeft + INFO_PROGRESS_X_OFFSET;
+        int progressY = guiTop + INFO_PROGRESS_Y_OFFSET;
+        guiGraphics.fill(progressX, progressY, progressX + INFO_PROGRESS_WIDTH, progressY + INFO_PROGRESS_HEIGHT, COLOR_PROGRESS_BG);
+        if (progressFillWidth > 0) {
+            guiGraphics.fill(progressX, progressY, progressX + progressFillWidth, progressY + INFO_PROGRESS_HEIGHT, COLOR_PROGRESS_FILL);
+        }
     }
 
     @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
-        int x = this.leftPos;
-        int y = this.topPos;
+        int guiLeft = this.leftPos;
+        int guiTop = this.topPos;
+        int flowScrollPixels = (int) (System.currentTimeMillis() / 40L);
 
-        // Base panel chrome.
-        guiGraphics.fill(x, y, x + this.imageWidth, y + this.imageHeight, 0xFF4B4B4B);
-        guiGraphics.fill(x + 1, y + 1, x + this.imageWidth - 1, y + this.imageHeight - 1, 0xFF6B6B6B);
+        int expFill = computeTankFillPixels(this.menu.getFluidAmount(), this.menu.getFluidCapacity(), XP_TANK_HEIGHT);
+        int energyFill = computeTankFillPixels(this.menu.getEnergyStored(), this.menu.getEnergyCapacity(), ENERGY_TANK_HEIGHT);
+        drawTintedFlowTank(
+                guiGraphics,
+                guiLeft + XP_TANK_X_OFFSET,
+                guiTop + XP_TANK_Y_OFFSET,
+                XP_TANK_WIDTH,
+                XP_TANK_HEIGHT,
+                expFill,
+                flowScrollPixels,
+                0.40F,
+                1.0F,
+                0.55F);
+        drawTintedFlowTank(
+                guiGraphics,
+                guiLeft + ENERGY_TANK_X_OFFSET,
+                guiTop + ENERGY_TANK_Y_OFFSET,
+                ENERGY_TANK_WIDTH,
+                ENERGY_TANK_HEIGHT,
+                energyFill,
+                flowScrollPixels + 24,
+                0.98F,
+                0.22F,
+                0.10F);
 
-        // Top queue info panel.
-        guiGraphics.fill(x + 6, y + 6, x + 148, y + 66, 0xFF1F1F1F);
-        guiGraphics.fill(x + 7, y + 7, x + 147, y + 65, 0xFF2A2A2A);
+        guiGraphics.blit(
+                MAIN_UI_TEXTURE,
+                guiLeft,
+                guiTop,
+                0.0F,
+                0.0F,
+                this.imageWidth,
+                this.imageHeight,
+                MAIN_UI_TEXTURE_WIDTH,
+                MAIN_UI_TEXTURE_HEIGHT);
 
-        List<Integer> displaySlots = new ArrayList<>();
-        for (int i = 0; i < MOB_GRID_TOTAL; i++) {
-            if (this.menu.getCapturedMobCount(i) > 0) {
-                displaySlots.add(i);
-            }
-        }
-        int maxScroll = Math.max(0, displaySlots.size() - MOB_GRID_VISIBLE);
+        List<Integer> displaySlots = collectQueuedMobSlots();
+        int maxScroll = Math.max(0, displaySlots.size() - MOB_LIST_VISIBLE_ROWS);
         this.mobScroll = Math.max(0, Math.min(this.mobScroll, maxScroll));
 
-        guiGraphics.drawString(this.font, Component.literal("Queued: " + this.menu.getTotalQueuedMobs()), x + 8, y + 10, 0xFFFFFFFF, false);
-        guiGraphics.drawString(this.font, Component.literal("Processing: " + this.menu.getTotalProcessingMobs()), x + 8, y + 20, 0xFFFFFFFF, false);
-        guiGraphics.drawString(this.font, Component.literal("Output Buffer: " + this.menu.getOutputBufferItemCount() + "/2048"), x + 8, y + 30, 0xFFE8C48C, false);
+        int statusTextX = guiLeft + STATUS_TEXT_X_OFFSET;
+        drawScaledStatusText(guiGraphics, "Queued: " + this.menu.getTotalQueuedMobs(), statusTextX, guiTop + STATUS_TEXT_START_Y_OFFSET, COLOR_WHITE);
+        drawScaledStatusText(guiGraphics, "Processing: " + this.menu.getTotalProcessingMobs(), statusTextX, guiTop + STATUS_TEXT_START_Y_OFFSET + STATUS_TEXT_LINE_HEIGHT, COLOR_WHITE);
+        drawScaledStatusText(guiGraphics, "Buffer: " + this.menu.getOutputBufferItemCount() + "/2048", statusTextX, guiTop + STATUS_TEXT_START_Y_OFFSET + (STATUS_TEXT_LINE_HEIGHT * 2), COLOR_ACCENT);
         if (displaySlots.isEmpty()) {
-            guiGraphics.drawString(this.font, Component.literal("No mobs queued"), x + 8, y + 42, 0xFFFFFFFF, false);
+            drawScaledStatusText(guiGraphics, "No mobs queued", statusTextX, guiTop + STATUS_LIST_START_Y_OFFSET, COLOR_WHITE);
         }
-        for (int i = 0; i < MOB_GRID_VISIBLE; i++) {
+        for (int i = 0; i < MOB_LIST_VISIBLE_ROWS; i++) {
             int index = this.mobScroll + i;
             if (index >= displaySlots.size()) {
                 break;
@@ -330,92 +469,23 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
             String name = type == null ? "Unknown" : type.getDescription().getString();
             String text = String.format("%s: %d", name, captured);
 
-            int lineY = y + 42 + i * 10;
-            guiGraphics.drawString(this.font, Component.literal(text), x + 8, lineY, 0xFFFFFFFF, false);
+            int lineY = guiTop + STATUS_LIST_START_Y_OFFSET + i * STATUS_LIST_LINE_HEIGHT;
+            drawScaledStatusText(guiGraphics, text, statusTextX, lineY, COLOR_WHITE);
         }
-        if (displaySlots.size() > MOB_GRID_VISIBLE) {
-            drawMobScrollBar(guiGraphics, x, y, displaySlots.size());
-        }
+        drawUpgradeLetter(guiGraphics, this.menu.slots.get(this.menu.getSharpnessMenuSlotIndex()), "S");
+        drawUpgradeLetter(guiGraphics, this.menu.slots.get(this.menu.getLootingMenuSlotIndex()), "L");
+        drawUpgradeLetter(guiGraphics, this.menu.slots.get(this.menu.getUnbreakingMenuSlotIndex()), "U");
 
-        // Separate lower section into two clear boxes: machine inventory and dual-tank panel.
-        guiGraphics.fill(x + 6, y + 70, x + 136, y + 128, 0xFF5B5B5B);
-        guiGraphics.fill(x + 138, y + 70, x + 170, y + 128, 0xFF5B5B5B);
-        guiGraphics.fill(x + 139, y + 71, x + 169, y + 127, 0xFF3D3D3D);
-        guiGraphics.fill(x + 6, y + 144, x + this.imageWidth - 6, y + this.imageHeight - 6, 0xFF555555);
+        drawProcessingProgressBar(guiGraphics, guiLeft, guiTop);
 
-        int sharpSlotX = x + 150;
-        int sharpSlotY = y + 6;
-        int lootSlotY = y + 28;
-        int unbreakingSlotX = x + 150;
-        int unbreakingSlotY = y + 50;
-        drawSlotFrame(guiGraphics, sharpSlotX - 1, sharpSlotY - 1);
-        drawSlotFrame(guiGraphics, sharpSlotX - 1, lootSlotY - 1);
-        drawSlotFrame(guiGraphics, unbreakingSlotX - 1, unbreakingSlotY - 1);
-        drawUpgradeLetter(guiGraphics, this.menu.slots.get(this.menu.getSharpnessMenuSlotIndex()), sharpSlotX, sharpSlotY, "S");
-        drawUpgradeLetter(guiGraphics, this.menu.slots.get(this.menu.getLootingMenuSlotIndex()), sharpSlotX, lootSlotY, "L");
-        drawUpgradeLetter(guiGraphics, this.menu.slots.get(this.menu.getUnbreakingMenuSlotIndex()), unbreakingSlotX, unbreakingSlotY, "U");
-
-        // Current batch progress line (left->right fill).
-        int progressPercent = Math.max(0, Math.min(100, this.menu.getProcessingProgressPercent()));
-        int progressFillWidth = INFO_PROGRESS_WIDTH * progressPercent / 100;
-        int progressX1 = x + INFO_PROGRESS_X_OFFSET;
-        int progressY1 = y + INFO_PROGRESS_Y_OFFSET;
-        guiGraphics.fill(progressX1, progressY1, progressX1 + INFO_PROGRESS_WIDTH, progressY1 + INFO_PROGRESS_HEIGHT, 0xFF1D1D1D);
-        if (progressFillWidth > 0) {
-            guiGraphics.fill(progressX1, progressY1, progressX1 + progressFillWidth, progressY1 + INFO_PROGRESS_HEIGHT, 0xFF1CB7F6);
-        }
-
-        drawSlotGrid(guiGraphics, x + 7, y + 73, 7, 3);
-        drawSlotGrid(guiGraphics, x + 7, y + 149, 9, 3);
-        drawSlotGrid(guiGraphics, x + 7, y + 207, 9, 1);
-
-        for (int col = 0; col <= 9; col++) {
-            int gx = x + 7 + col * 18;
-            guiGraphics.fill(gx, y + 149, gx + 1, y + 225, 0x66444444);
-        }
-        for (int row = 0; row <= 3; row++) {
-            int gy = y + 149 + row * 18;
-            guiGraphics.fill(x + 7, gy, x + 169, gy + 1, 0x66444444);
-        }
-        for (int col = 0; col <= 9; col++) {
-            int gx = x + 7 + col * 18;
-            guiGraphics.fill(gx, y + 207, gx + 1, y + 225, 0x77444444);
-        }
-        guiGraphics.fill(x + 7, y + 207, x + 169, y + 208, 0x77444444);
-        guiGraphics.fill(x + 7, y + 225, x + 169, y + 226, 0x77444444);
-
-        drawVerticalTank(
-                guiGraphics,
-                x + TANK_X_OFFSET,
-                y + TANK_Y_OFFSET,
-                TANK_WIDTH,
-                TANK_HEIGHT,
-                TANK_RENDER_FILL_HEIGHT,
-                this.menu.getFluidAmount(),
-                this.menu.getFluidCapacity(),
-                0xFF6AFF2E,
-                0xFFB8FF7A,
-                0x774D4D4D);
-        // RF tank uses a red palette but reuses the same shape/markers as XP for consistency.
-        drawVerticalTank(
-                guiGraphics,
-                x + ENERGY_TANK_X_OFFSET,
-                y + ENERGY_TANK_Y_OFFSET,
-                ENERGY_TANK_WIDTH,
-                ENERGY_TANK_HEIGHT,
-                ENERGY_TANK_RENDER_FILL_HEIGHT,
-                this.menu.getEnergyStored(),
-                this.menu.getEnergyCapacity(),
-                0xFFE53030,
-                0xFFFF6A6A,
-                0x775A2C2C);
-
-        int toggleX1 = x + TOGGLE_X_OFFSET;
-        int toggleY1 = y + TOGGLE_Y_OFFSET;
-        int toggleX2 = toggleX1 + TOGGLE_WIDTH;
-        int toggleY2 = toggleY1 + TOGGLE_HEIGHT;
+        int toggleX1 = guiLeft + CONFIG_TOGGLE_X_OFFSET;
+        int toggleY1 = guiTop + CONFIG_TOGGLE_Y_OFFSET;
+        int toggleX2 = toggleX1 + CONFIG_TOGGLE_WIDTH;
+        int toggleY2 = toggleY1 + CONFIG_TOGGLE_HEIGHT;
         guiGraphics.fill(toggleX1, toggleY1, toggleX2, toggleY2, 0xFFB8B8B8);
         guiGraphics.fill(toggleX1 + 1, toggleY1 + 1, toggleX2 - 1, toggleY2 - 1, this.configOpen ? 0xFFE7E7E7 : 0xFFD2D2D2);
+
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     private void renderConfigOverlay(GuiGraphics guiGraphics) {
@@ -428,33 +498,38 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
 
         int panelX1 = getConfigPanelX();
         int panelY1 = getConfigPanelY();
-        int panelX2 = panelX1 + PANEL_WIDTH;
-        int panelY2 = panelY1 + PANEL_HEIGHT;
-        guiGraphics.fill(panelX1, panelY1, panelX2, panelY2, 0xFF454545);
-        guiGraphics.fill(panelX1 + 1, panelY1 + 1, panelX2 - 1, panelY2 - 1, 0xFF686868);
-        guiGraphics.fill(panelX1 + 1, panelY1 + 1, panelX2 - 1, panelY1 + PANEL_HEADER_HEIGHT, 0xFF7A7A7A);
+        guiGraphics.blit(
+                CONFIG_PANEL_TEXTURE,
+                panelX1,
+                panelY1,
+                0.0F,
+                0.0F,
+                PANEL_WIDTH,
+                PANEL_HEIGHT,
+                CONFIG_PANEL_TEXTURE_WIDTH,
+                CONFIG_PANEL_TEXTURE_HEIGHT);
 
-        int labelsX = panelX1 + 4;
-        int valuesX = panelX1 + 40;
-        guiGraphics.drawString(this.font, Component.literal("Area"), labelsX, panelY1 + 4, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, Component.literal("X:"), labelsX, panelY1 + 20, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, Component.literal("Y:"), labelsX, panelY1 + 40, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, Component.literal("Z:"), labelsX, panelY1 + 60, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, String.valueOf(this.menu.getAreaX()), valuesX, panelY1 + 20, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, String.valueOf(this.menu.getAreaY()), valuesX, panelY1 + 40, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, String.valueOf(this.menu.getAreaZ()), valuesX, panelY1 + 60, 0xFFEDEDED, false);
+        int labelsX = panelX1 + CONFIG_LABELS_X_OFFSET;
+        int valuesCenterX = panelX1 + CONFIG_VALUES_CENTER_X_OFFSET;
+        drawScaledConfigText(guiGraphics, "Area", labelsX, panelY1 + CONFIG_AREA_HEADER_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledConfigText(guiGraphics, "X:", labelsX, panelY1 + CONFIG_AREA_X_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledConfigText(guiGraphics, "Y:", labelsX, panelY1 + CONFIG_AREA_Y_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledConfigText(guiGraphics, "Z:", labelsX, panelY1 + CONFIG_AREA_Z_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledCenteredConfigText(guiGraphics, String.valueOf(this.menu.getAreaX()), valuesCenterX, panelY1 + CONFIG_AREA_X_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledCenteredConfigText(guiGraphics, String.valueOf(this.menu.getAreaY()), valuesCenterX, panelY1 + CONFIG_AREA_Y_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledCenteredConfigText(guiGraphics, String.valueOf(this.menu.getAreaZ()), valuesCenterX, panelY1 + CONFIG_AREA_Z_Y_OFFSET, COLOR_CONFIG_TEXT);
 
-        guiGraphics.drawString(this.font, Component.literal("Position"), labelsX, panelY1 + 76, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, Component.literal("X:"), labelsX, panelY1 + 92, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, Component.literal("Y:"), labelsX, panelY1 + 112, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, Component.literal("Z:"), labelsX, panelY1 + 132, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, String.valueOf(this.menu.getPosX()), valuesX, panelY1 + 92, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, String.valueOf(this.menu.getPosY()), valuesX, panelY1 + 112, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, String.valueOf(this.menu.getPosZ()), valuesX, panelY1 + 132, 0xFFEDEDED, false);
+        drawScaledConfigText(guiGraphics, "Position", labelsX, panelY1 + CONFIG_POSITION_HEADER_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledConfigText(guiGraphics, "X:", labelsX, panelY1 + CONFIG_POS_X_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledConfigText(guiGraphics, "Y:", labelsX, panelY1 + CONFIG_POS_Y_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledConfigText(guiGraphics, "Z:", labelsX, panelY1 + CONFIG_POS_Z_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledCenteredConfigText(guiGraphics, String.valueOf(this.menu.getPosX()), valuesCenterX, panelY1 + CONFIG_POS_X_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledCenteredConfigText(guiGraphics, String.valueOf(this.menu.getPosY()), valuesCenterX, panelY1 + CONFIG_POS_Y_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledCenteredConfigText(guiGraphics, String.valueOf(this.menu.getPosZ()), valuesCenterX, panelY1 + CONFIG_POS_Z_Y_OFFSET, COLOR_CONFIG_TEXT);
 
-        guiGraphics.drawString(this.font, Component.literal("Tick Rate"), labelsX, panelY1 + 148, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, Component.literal("T:"), labelsX, panelY1 + 164, 0xFFEDEDED, false);
-        guiGraphics.drawString(this.font, String.valueOf(this.menu.getCaptureTickInterval()), valuesX, panelY1 + 164, 0xFFEDEDED, false);
+        drawScaledConfigText(guiGraphics, "Tick Rate", labelsX, panelY1 + CONFIG_TICK_RATE_HEADER_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledConfigText(guiGraphics, "T:", labelsX, panelY1 + CONFIG_TICK_RATE_VALUE_Y_OFFSET, COLOR_CONFIG_TEXT);
+        drawScaledCenteredConfigText(guiGraphics, String.valueOf(this.menu.getCaptureTickInterval()), valuesCenterX, panelY1 + CONFIG_TICK_RATE_VALUE_Y_OFFSET, COLOR_CONFIG_TEXT);
 
         guiGraphics.pose().popPose();
     }
@@ -476,7 +551,7 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
             }
             return true;
         }
-        if (isMouseOverTank((int) mouseX, (int) mouseY) && (button == 0 || button == 1)) {
+        if (isMouseOverXpTank((int) mouseX, (int) mouseY) && (button == 0 || button == 1)) {
             // Left click: extract XP into empty bucket. Right click: insert XP from XP bucket.
             sendMenuButton(button == 0 ? 13 : 18);
             return true;
@@ -504,14 +579,19 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
 
     @Override
     protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        guiGraphics.drawString(this.font, this.playerInventoryTitle, this.inventoryLabelX, this.inventoryLabelY, 0x2A1A0F, false);
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().scale(INVENTORY_TEXT_SCALE, INVENTORY_TEXT_SCALE, 1.0F);
+        int scaledX = Math.round(this.inventoryLabelX / INVENTORY_TEXT_SCALE);
+        int scaledY = Math.round(this.inventoryLabelY / INVENTORY_TEXT_SCALE);
+        guiGraphics.drawString(this.font, this.playerInventoryTitle, scaledX, scaledY, 0x2A1A0F, false);
+        guiGraphics.pose().popPose();
     }
 
-    private boolean isMouseOverTank(int mouseX, int mouseY) {
-        int tankX1 = this.leftPos + TANK_X_OFFSET;
-        int tankY1 = this.topPos + TANK_Y_OFFSET;
-        int tankX2 = tankX1 + TANK_WIDTH;
-        int tankY2 = tankY1 + TANK_HEIGHT;
+    private boolean isMouseOverXpTank(int mouseX, int mouseY) {
+        int tankX1 = this.leftPos + XP_TANK_X_OFFSET;
+        int tankY1 = this.topPos + XP_TANK_Y_OFFSET;
+        int tankX2 = tankX1 + XP_TANK_WIDTH;
+        int tankY2 = tankY1 + XP_TANK_HEIGHT;
         return mouseX >= tankX1 && mouseX < tankX2 && mouseY >= tankY1 && mouseY < tankY2;
     }
 
@@ -523,14 +603,16 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
         return mouseX >= tankX1 && mouseX < tankX2 && mouseY >= tankY1 && mouseY < tankY2;
     }
 
-    private void drawUpgradeLetter(GuiGraphics guiGraphics, Slot slot, int slotX, int slotY, String letter) {
+    private void drawUpgradeLetter(GuiGraphics guiGraphics, Slot slot, String letter) {
         if (slot.hasItem()) {
             return;
         }
+        int slotX = this.leftPos + slot.x;
+        int slotY = this.topPos + slot.y;
         int textWidth = this.font.width(letter);
         int textX = slotX + (16 - textWidth) / 2;
         int textY = slotY + 4;
-        guiGraphics.drawString(this.font, letter, textX, textY, 0xFF2A1A0F, false);
+        guiGraphics.drawString(this.font, letter, textX, textY, COLOR_DARK_TEXT, false);
     }
 
     @Override
@@ -554,20 +636,51 @@ public class EssenceExtractorScreen extends AbstractContainerScreen<EssenceExtra
             guiGraphics.pose().popPose();
         }
         updateConfigButtonsVisibility();
-        if (isMouseOverTank(mouseX, mouseY)) {
-            guiGraphics.renderTooltip(this.font,
-                    Component.literal(this.menu.getFluidAmount() + " / " + this.menu.getFluidCapacity() + " mB"),
+        if (isMouseOverXpTank(mouseX, mouseY)) {
+            guiGraphics.renderTooltip(
+                    this.font,
+                    Component.literal(this.menu.getFluidAmount() + " / " + this.menu.getFluidCapacity() + " mB XP"),
                     mouseX,
                     mouseY);
-        }
-        if (isMouseOverEnergyTank(mouseX, mouseY)) {
-            guiGraphics.renderTooltip(this.font,
+        } else if (isMouseOverEnergyTank(mouseX, mouseY)) {
+            guiGraphics.renderTooltip(
+                    this.font,
                     Component.literal(this.menu.getEnergyStored() + " / " + this.menu.getEnergyCapacity() + " FE"),
                     mouseX,
                     mouseY);
         }
         if (!overConfigPanel) {
             this.renderTooltip(guiGraphics, mouseX, mouseY);
+        }
+    }
+
+    private static class TextureButton extends Button {
+        private final ResourceLocation normalTexture;
+        private final ResourceLocation pressedTexture;
+        private boolean pressedVisual;
+
+        private TextureButton(int x, int y, int width, int height, ResourceLocation normalTexture, ResourceLocation pressedTexture, Button.OnPress onPress) {
+            super(x, y, width, height, Component.empty(), onPress, DEFAULT_NARRATION);
+            this.normalTexture = normalTexture;
+            this.pressedTexture = pressedTexture;
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+            ResourceLocation texture = this.pressedVisual ? this.pressedTexture : this.normalTexture;
+            guiGraphics.blit(texture, this.getX(), this.getY(), 0.0F, 0.0F, this.getWidth(), this.getHeight(), 256, 256);
+        }
+
+        @Override
+        public void onClick(double mouseX, double mouseY) {
+            this.pressedVisual = true;
+            super.onClick(mouseX, mouseY);
+        }
+
+        @Override
+        public void onRelease(double mouseX, double mouseY) {
+            this.pressedVisual = false;
+            super.onRelease(mouseX, mouseY);
         }
     }
 

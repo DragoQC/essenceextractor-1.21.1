@@ -15,13 +15,15 @@ import com.essenceextractor.essenceextractormod.ServerSettings;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -280,10 +282,19 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 	}
 
 	public int getProcessingProgressPercent() {
-		if (this.currentBatchTotal <= 0) {
+		boolean hasWork = !this.processingMobQueue.isEmpty() || !this.capturedMobQueue.isEmpty() || this.currentBatchTotal > 0;
+		if (!hasWork) {
 			return 0;
 		}
-		return Math.min(100, (int) ((this.currentBatchProcessed * 100.0D) / this.currentBatchTotal));
+
+		int interval = Math.max(1, getEffectiveMobProcessInterval());
+		int intervalPercent = Math.min(100, (int) ((Math.min(this.mobProcessTicks, interval) * 100.0D) / interval));
+		if (this.currentBatchTotal <= 0) {
+			return intervalPercent;
+		}
+
+		int batchPercent = Math.min(100, (int) ((this.currentBatchProcessed * 100.0D) / this.currentBatchTotal));
+		return Math.max(intervalPercent, batchPercent);
 	}
 
 	@Override
@@ -368,6 +379,16 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 		}
 	}
 
+	@Override
+	public Packet<ClientGamePacketListener> getUpdatePacket() {
+		return ClientboundBlockEntityDataPacket.create(this);
+	}
+
+	@Override
+	public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+		return saveWithoutMetadata(registries);
+	}
+
 	private static EntityType<?> parseEntityType(String id) {
 		if (id == null || id.isEmpty()) {
 			return null;
@@ -439,15 +460,15 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 			}
 		}
 
-		markDirty();
+		markDirtyAndSync();
 	}
 
 	private static int clampArea(int value) {
-		return Math.max(0, Math.min(16, value));
+		return Math.max(0, Math.min(50, value));
 	}
 
 	private static int clampPos(int value) {
-		return Math.max(-16, Math.min(16, value));
+		return Math.max(-50, Math.min(50, value));
 	}
 
 	private static int clampCaptureTick(int value) {
@@ -467,6 +488,11 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 		if (!stack.is(Items.ENCHANTED_BOOK)) {
 			return false;
 		}
+		// Client slot checks can run before this block entity has full level/registry
+		// context. Allow the insert and let server-side logic enforce exact validation.
+		if (this.level == null) {
+			return true;
+		}
 		return switch (slot) {
 			case SHARPNESS_SLOT -> getEnchantmentLevel(stack, Enchantments.SHARPNESS) > 0;
 			case LOOTING_SLOT -> getEnchantmentLevel(stack, Enchantments.LOOTING) > 0;
@@ -483,11 +509,10 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 		if (stack.isEmpty()) {
 			return 0;
 		}
-		// Client-side slot validation can run before BE level is fully available.
-		// Allow the move client-side and let server-side validation enforce exact
-		// enchant.
+		// No registry context yet (during early load). Treat as no enchant so
+		// deterministic calculations (like RF capacity) stay stable.
 		if (this.level == null) {
-			return 1;
+			return 0;
 		}
 		var enchantments = this.level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
 		var enchantment = enchantments.getOrThrow(enchantmentKey);
@@ -497,6 +522,13 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 		}
 		// 1.21 data components can store enchant data differently depending on source.
 		return EnchantmentHelper.getEnchantmentsForCrafting(stack).getLevel(enchantment);
+	}
+
+	@Override
+	public void onLoad() {
+		super.onLoad();
+		// Re-evaluate capacity after full world/registry context is available.
+		updateEnergyCapacityFromUnbreaking();
 	}
 
 	private int getEffectiveMobProcessInterval() {
@@ -626,10 +658,6 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 		if (blockEntity.captureTicks >= clampCaptureTick(blockEntity.captureTickInterval)) {
 			blockEntity.captureTicks = 0;
 			blockEntity.captureMobs(level, pos);
-
-			if (blockEntity.showArea && level instanceof ServerLevel serverLevel) {
-				blockEntity.renderAreaOutline(serverLevel, pos);
-			}
 		}
 
 		blockEntity.mobProcessTicks++;
@@ -706,6 +734,9 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 		AABB captureArea = buildCaptureAABB(pos);
 		boolean changed = false;
 		for (Mob mob : level.getEntitiesOfClass(Mob.class, captureArea, Mob::isAlive)) {
+			if (mob.getType() == EntityType.ENDER_DRAGON) {
+				continue;
+			}
 			if (hasEquipment(mob)) {
 				continue;
 			}
@@ -789,6 +820,10 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 	}
 
 	private void processSingleCapturedMob(ServerLevel level, BlockPos machinePos, CapturedMobData capturedMob) {
+		if (capturedMob.type() == EntityType.ENDER_DRAGON) {
+			return;
+		}
+
 		if (capturedMob.wasBaby()) {
 			this.tank.fill(new FluidStack(EssenceExtractor.EXPERIENCE_FLUID.get(), BABY_MOB_XP_MB),
 					IFluidHandler.FluidAction.EXECUTE);
@@ -811,12 +846,19 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 				.create(LootContextParamSets.ENTITY);
 
 		var lootTableKey = living.getLootTable();
+		boolean droppedNetherStar = false;
 		for (ItemStack stack : level.getServer().reloadableRegistries().getLootTable(lootTableKey).getRandomItems(params)) {
 			int lootingLevel = getLootingUpgradeLevel();
 			if (lootingLevel > 0 && !stack.isEmpty()) {
 				stack.grow(level.random.nextInt(lootingLevel + 1));
 			}
+			if (!stack.isEmpty() && stack.is(Items.NETHER_STAR)) {
+				droppedNetherStar = true;
+			}
 			queueProcessedDrop(stack.copy());
+		}
+		if (capturedMob.type() == EntityType.WITHER && !droppedNetherStar) {
+			queueProcessedDrop(new ItemStack(Items.NETHER_STAR));
 		}
 
 		if (living instanceof Mob mob) {
@@ -1058,21 +1100,8 @@ public class EssenceExtractorBlockEntity extends BlockEntity implements net.mine
 		return new AABB(minX, minY, minZ, maxX, maxY, maxZ);
 	}
 
-	private void renderAreaOutline(ServerLevel level, BlockPos machinePos) {
-		AABB box = buildCaptureAABB(machinePos);
-		double minX = box.minX;
-		double minY = box.minY;
-		double minZ = box.minZ;
-		double maxX = box.maxX;
-		double maxY = box.maxY;
-		double maxZ = box.maxZ;
-
-		for (int i = 0; i < 8; i++) {
-			double x = (i & 1) == 0 ? minX : maxX;
-			double y = (i & 2) == 0 ? minY : maxY;
-			double z = (i & 4) == 0 ? minZ : maxZ;
-			level.sendParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 1, 0.0, 0.0, 0.0, 0.0);
-		}
+	public AABB getCaptureAABB() {
+		return buildCaptureAABB(this.worldPosition);
 	}
 
 	@Override

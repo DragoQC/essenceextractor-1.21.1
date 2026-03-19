@@ -4,6 +4,7 @@ import com.essenceextractor.essenceextractormod.EssenceExtractor;
 import com.essenceextractor.essenceextractormod.blockentity.EssenceExtractorBlockEntity;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -16,7 +17,6 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.Level;
-import net.minecraft.core.registries.Registries;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import net.neoforged.neoforge.items.SlotItemHandler;
@@ -45,15 +45,17 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
     private static final int DATA_UNBREAKING_LEVEL = 15;
     private static final int DATA_OUTPUT_BUFFER_COUNT = 16;
     private static final int DATA_PROCESSING_PROGRESS = 17;
+    private static final int MOB_DATA_START_INDEX = DATA_PROCESSING_PROGRESS + 1;
+    private static final int MOB_DATA_STRIDE = 3;
     private static final int MACHINE_DATA_COUNT = 18 + (EssenceExtractorBlockEntity.CAPTURED_DISPLAY_COUNT * 3);
-    private static final int MACHINE_COLUMNS = 7;
-    private static final int MACHINE_ROWS = 3;
-    private static final int MACHINE_SLOT_COUNT = MACHINE_COLUMNS * MACHINE_ROWS;
+    private static final int MACHINE_GRID_COLUMNS = 7;
+    private static final int MACHINE_GRID_ROWS = 3;
+    private static final int MACHINE_INVENTORY_SLOT_COUNT = MACHINE_GRID_COLUMNS * MACHINE_GRID_ROWS;
     private static final int UPGRADE_SLOT_COUNT = EssenceExtractorBlockEntity.UPGRADE_SLOT_COUNT;
-    private static final int MACHINE_START = 0;
-    private static final int UPGRADE_START = MACHINE_START + MACHINE_SLOT_COUNT;
-    private static final int PLAYER_START = UPGRADE_START + UPGRADE_SLOT_COUNT;
-    private static final int HOTBAR_END = PLAYER_START + 27 + 9;
+    private static final int MACHINE_SLOT_START = 0;
+    private static final int UPGRADE_SLOT_START = MACHINE_SLOT_START + MACHINE_INVENTORY_SLOT_COUNT;
+    private static final int PLAYER_SLOT_START = UPGRADE_SLOT_START + UPGRADE_SLOT_COUNT;
+    private static final int PLAYER_SLOT_END_EXCLUSIVE = PLAYER_SLOT_START + 27 + 9;
 
     private final Level level;
     private final BlockPos pos;
@@ -61,7 +63,7 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
     private final ContainerData machineData;
 
     public EssenceExtractorMenu(int containerId, Inventory playerInventory, BlockPos pos) {
-        this(containerId, playerInventory, pos, getItemHandler(playerInventory, pos), getMachineData(playerInventory, pos));
+        this(containerId, playerInventory, pos, resolveMachineItemHandler(playerInventory, pos), createMachineDataSync(playerInventory, pos));
     }
 
     private EssenceExtractorMenu(int containerId, Inventory playerInventory, BlockPos pos, IItemHandler machineInventory, ContainerData machineData) {
@@ -72,7 +74,7 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
         this.machineData = machineData;
 
         addMachineSlots(machineInventory);
-        addUpgradeSlots(getUpgradeItemHandler(playerInventory, pos));
+        addUpgradeSlots(resolveUpgradeItemHandler(playerInventory, pos));
         addPlayerInventorySlots(playerInventory);
 
         this.addDataSlots(this.machineData);
@@ -80,23 +82,23 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
 
     private void addMachineSlots(IItemHandler machineInventory) {
         int machineX = 8;
-        int machineY = 74;
-        for (int row = 0; row < MACHINE_ROWS; row++) {
-            for (int col = 0; col < MACHINE_COLUMNS; col++) {
-                int index = row * MACHINE_COLUMNS + col;
+        int machineY = 70;
+        for (int row = 0; row < MACHINE_GRID_ROWS; row++) {
+            for (int col = 0; col < MACHINE_GRID_COLUMNS; col++) {
+                int index = row * MACHINE_GRID_COLUMNS + col;
                 this.addSlot(new SlotItemHandler(machineInventory, index, machineX + col * 18, machineY + row * 18));
             }
         }
     }
 
     private void addUpgradeSlots(IItemHandler upgradeHandler) {
-        this.addSlot(new SlotItemHandler(upgradeHandler, EssenceExtractorBlockEntity.SHARPNESS_SLOT, 150, 6));
-        this.addSlot(new SlotItemHandler(upgradeHandler, EssenceExtractorBlockEntity.LOOTING_SLOT, 150, 28));
-        this.addSlot(new SlotItemHandler(upgradeHandler, EssenceExtractorBlockEntity.UNBREAKING_SLOT, 150, 50));
+        this.addSlot(new SlotItemHandler(upgradeHandler, EssenceExtractorBlockEntity.SHARPNESS_SLOT, 116, 8));
+        this.addSlot(new SlotItemHandler(upgradeHandler, EssenceExtractorBlockEntity.LOOTING_SLOT, 116, 26));
+        this.addSlot(new SlotItemHandler(upgradeHandler, EssenceExtractorBlockEntity.UNBREAKING_SLOT, 116, 44));
     }
 
     private void addPlayerInventorySlots(Inventory playerInventory) {
-        int playerInvY = 150;
+        int playerInvY = 132;
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 9; col++) {
                 int slot = col + row * 9 + 9;
@@ -104,13 +106,13 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
             }
         }
 
-        int hotbarY = 208;
+        int hotbarY = 190;
         for (int col = 0; col < 9; col++) {
             this.addSlot(new Slot(playerInventory, col, 8 + col * 18, hotbarY));
         }
     }
 
-    private static IItemHandler getItemHandler(Inventory playerInventory, BlockPos pos) {
+    private static IItemHandler resolveMachineItemHandler(Inventory playerInventory, BlockPos pos) {
         if (playerInventory.player.level().getBlockEntity(pos) instanceof EssenceExtractorBlockEntity blockEntity) {
             return blockEntity.getItemHandler();
         }
@@ -118,14 +120,14 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
         return new ItemStackHandler(EssenceExtractorBlockEntity.SLOT_COUNT);
     }
 
-    private static IItemHandler getUpgradeItemHandler(Inventory playerInventory, BlockPos pos) {
+    private static IItemHandler resolveUpgradeItemHandler(Inventory playerInventory, BlockPos pos) {
         if (playerInventory.player.level().getBlockEntity(pos) instanceof EssenceExtractorBlockEntity blockEntity) {
             return blockEntity.getUpgradeItemHandler();
         }
         return new ItemStackHandler(EssenceExtractorBlockEntity.UPGRADE_SLOT_COUNT);
     }
 
-    private static ContainerData getMachineData(Inventory playerInventory, BlockPos pos) {
+    private static ContainerData createMachineDataSync(Inventory playerInventory, BlockPos pos) {
         if (playerInventory.player.level().isClientSide()) {
             // Client side does not read BE directly; values are delivered by ContainerData sync.
             return new SimpleContainerData(MACHINE_DATA_COUNT);
@@ -135,7 +137,7 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
             return new ContainerData() {
                 @Override
                 public int get(int index) {
-                    if (index < DATA_PROCESSING_PROGRESS + 1) {
+                    if (index < MOB_DATA_START_INDEX) {
                         return switch (index) {
                             case DATA_FLUID_AMOUNT -> blockEntity.getFluidAmount();
                             case DATA_FLUID_CAPACITY -> blockEntity.getFluidCapacity();
@@ -159,9 +161,9 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
                         };
                     }
 
-                    int offset = index - (DATA_PROCESSING_PROGRESS + 1);
-                    int slot = offset / 3;
-                    int part = offset % 3;
+                    int offset = index - MOB_DATA_START_INDEX;
+                    int slot = offset / MOB_DATA_STRIDE;
+                    int part = offset % MOB_DATA_STRIDE;
                     return switch (part) {
                         case 0 -> blockEntity.getCapturedMobTypeRawId(slot);
                         case 1 -> blockEntity.getCapturedMobCount(slot);
@@ -261,28 +263,32 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
         return this.pos;
     }
 
+    private int mobDataIndex(int slot, int partOffset) {
+        return MOB_DATA_START_INDEX + (slot * MOB_DATA_STRIDE) + partOffset;
+    }
+
     public int getCapturedMobTypeRawId(int index) {
-        return this.machineData.get((DATA_PROCESSING_PROGRESS + 1) + (index * 3));
+        return this.machineData.get(mobDataIndex(index, 0));
     }
 
     public int getCapturedMobCount(int index) {
-        return this.machineData.get((DATA_PROCESSING_PROGRESS + 2) + (index * 3));
+        return this.machineData.get(mobDataIndex(index, 1));
     }
 
     public int getProcessingMobCount(int index) {
-        return this.machineData.get((DATA_PROCESSING_PROGRESS + 3) + (index * 3));
+        return this.machineData.get(mobDataIndex(index, 2));
     }
 
     public int getUnbreakingMenuSlotIndex() {
-        return UPGRADE_START + EssenceExtractorBlockEntity.UNBREAKING_SLOT;
+        return UPGRADE_SLOT_START + EssenceExtractorBlockEntity.UNBREAKING_SLOT;
     }
 
     public int getSharpnessMenuSlotIndex() {
-        return UPGRADE_START + EssenceExtractorBlockEntity.SHARPNESS_SLOT;
+        return UPGRADE_SLOT_START + EssenceExtractorBlockEntity.SHARPNESS_SLOT;
     }
 
     public int getLootingMenuSlotIndex() {
-        return UPGRADE_START + EssenceExtractorBlockEntity.LOOTING_SLOT;
+        return UPGRADE_SLOT_START + EssenceExtractorBlockEntity.LOOTING_SLOT;
     }
 
     public int getTotalQueuedMobs() {
@@ -355,17 +361,17 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
         ItemStack sourceStack = sourceSlot.getItem();
         ItemStack sourceCopy = sourceStack.copy();
 
-        if (index < PLAYER_START) {
-            if (!this.moveItemStackTo(sourceStack, PLAYER_START, HOTBAR_END, true)) {
+        if (index < PLAYER_SLOT_START) {
+            if (!this.moveItemStackTo(sourceStack, PLAYER_SLOT_START, PLAYER_SLOT_END_EXCLUSIVE, true)) {
                 return ItemStack.EMPTY;
             }
         } else {
             boolean moved = false;
-            if (sourceStack.is(net.minecraft.world.item.Items.ENCHANTED_BOOK)) {
+            if (sourceStack.is(Items.ENCHANTED_BOOK)) {
                 moved = moveBookToMatchingUpgradeSlot(sourceStack);
             }
             if (!moved) {
-                moved = this.moveItemStackTo(sourceStack, MACHINE_START, MACHINE_SLOT_COUNT, false);
+                moved = this.moveItemStackTo(sourceStack, MACHINE_SLOT_START, MACHINE_INVENTORY_SLOT_COUNT, false);
             }
             if (!moved) {
                 return ItemStack.EMPTY;
@@ -416,7 +422,7 @@ public class EssenceExtractorMenu extends AbstractContainerMenu {
     }
 
     private boolean moveToUpgradeSlot(ItemStack stack, int upgradeSlot) {
-        int startIndex = UPGRADE_START + upgradeSlot;
+        int startIndex = UPGRADE_SLOT_START + upgradeSlot;
         return this.moveItemStackTo(stack, startIndex, startIndex + 1, false);
     }
 

@@ -1,5 +1,6 @@
 package com.essenceextractor.essenceextractormod;
 
+import com.essenceextractor.essenceextractormod.client.render.CaptureAreaForcefieldRenderer;
 import com.essenceextractor.essenceextractormod.client.screen.EssenceExtractorScreen;
 
 import net.minecraft.resources.ResourceLocation;
@@ -7,6 +8,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent;
@@ -18,14 +20,16 @@ public class EssenceExtractorClient {
     public EssenceExtractorClient(IEventBus modEventBus, ModContainer container) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         modEventBus.addListener(this::registerScreens);
-        modEventBus.addListener(this::registerClientExtensions);
+        modEventBus.addListener(this::registerFluidClientExtensions);
+        // World-space capture-box overlay render hook.
+        NeoForge.EVENT_BUS.addListener(CaptureAreaForcefieldRenderer::onRenderLevelStage);
     }
 
     private void registerScreens(RegisterMenuScreensEvent event) {
         event.register(EssenceExtractor.ESSENCE_EXTRACTOR_MENU.get(), EssenceExtractorScreen::new);
     }
 
-    private void registerClientExtensions(RegisterClientExtensionsEvent event) {
+    private void registerFluidClientExtensions(RegisterClientExtensionsEvent event) {
         // Keep fluid textures centralized so tank rendering and world blocks stay visually consistent.
         event.registerFluidType(new IClientFluidTypeExtensions() {
             private static final ResourceLocation STILL = ResourceLocation.fromNamespaceAndPath(EssenceExtractor.MODID, "block/experience_still");
